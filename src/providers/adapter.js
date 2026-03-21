@@ -9,6 +9,7 @@ import { IFlowApiService } from './openai/iflow-core.js';
 import { CodexApiService } from './openai/codex-core.js';
 import { ForwardApiService } from './forward/forward-core.js';
 import { GrokApiService } from './grok/grok-core.js';
+import { CursorApiService } from './cursor/cursor-core.js';
 import { MODEL_PROVIDER } from '../utils/common.js';
 import logger from '../utils/logger.js';
 
@@ -688,7 +689,67 @@ export class GrokApiServiceAdapter extends ApiServiceAdapter {
     }
 }
 
+// Cursor OAuth 服务适配器
+export class CursorApiServiceAdapter extends ApiServiceAdapter {
+    constructor(config) {
+        super();
+        this.cursorApiService = new CursorApiService(config);
+    }
+
+    async generateContent(model, requestBody) {
+        if (!this.cursorApiService.isInitialized) {
+            logger.warn('[CursorApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.cursorApiService.initialize();
+        }
+        return this.cursorApiService.generateContent(model, requestBody);
+    }
+
+    async *generateContentStream(model, requestBody) {
+        if (!this.cursorApiService.isInitialized) {
+            logger.warn('[CursorApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.cursorApiService.initialize();
+        }
+        yield* this.cursorApiService.generateContentStream(model, requestBody);
+    }
+
+    async listModels() {
+        if (!this.cursorApiService.isInitialized) {
+            logger.warn('[CursorApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.cursorApiService.initialize();
+        }
+        return this.cursorApiService.listModels();
+    }
+
+    async refreshToken() {
+        if (!this.cursorApiService.isInitialized) {
+            await this.cursorApiService.initialize();
+        }
+        if (this.isExpiryDateNear()) {
+            logger.info('[Cursor] Expiry date is near, refreshing token...');
+            return this.cursorApiService.refreshToken();
+        }
+        return Promise.resolve();
+    }
+
+    async forceRefreshToken() {
+        if (!this.cursorApiService.isInitialized) {
+            await this.cursorApiService.initialize();
+        }
+        logger.info('[Cursor] Force refreshing token...');
+        return this.cursorApiService.forceRefreshToken();
+    }
+
+    isExpiryDateNear() {
+        return this.cursorApiService.isExpiryDateNear();
+    }
+
+    async getUsageLimits() {
+        return {};
+    }
+}
+
 // 注册所有内置适配器
+registerAdapter(MODEL_PROVIDER.CURSOR_OAUTH, CursorApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM, OpenAIApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM_RESPONSES, OpenAIResponsesApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.GEMINI_CLI, GeminiApiServiceAdapter);

@@ -462,7 +462,7 @@ async function openProviderManager(providerType) {
  */
 function generateAuthButton(providerType) {
     // 只为支持OAuth的提供商显示授权按钮
-    const oauthProviders = ['gemini-cli-oauth', 'gemini-antigravity', 'openai-qwen-oauth', 'claude-kiro-oauth', 'openai-iflow', 'openai-codex-oauth'];
+    const oauthProviders = ['gemini-cli-oauth', 'gemini-antigravity', 'openai-qwen-oauth', 'claude-kiro-oauth', 'openai-iflow', 'openai-codex-oauth', 'cursor-oauth'];
 
     if (!oauthProviders.includes(providerType)) {
         return '';
@@ -506,6 +506,12 @@ async function handleGenerateAuthUrl(providerType) {
     // 如果是 Codex OAuth，显示认证方式选择对话框
     if (providerType === 'openai-codex-oauth') {
         showCodexAuthMethodSelector(providerType);
+        return;
+    }
+
+    // Cursor OAuth — direct PKCE polling flow, no extra dialog needed
+    if (providerType === 'cursor-oauth') {
+        await executeGenerateAuthUrl(providerType, {});
         return;
     }
 

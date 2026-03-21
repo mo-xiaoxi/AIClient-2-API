@@ -689,6 +689,7 @@ function getFieldOrder(provider) {
         'openai-iflow': ['IFLOW_OAUTH_CREDS_FILE_PATH', 'IFLOW_BASE_URL'],
         'openai-codex-oauth': ['CODEX_OAUTH_CREDS_FILE_PATH', 'CODEX_EMAIL', 'CODEX_BASE_URL'],
         'grok-custom': ['GROK_COOKIE_TOKEN', 'GROK_CF_CLEARANCE', 'GROK_USER_AGENT', 'GROK_BASE_URL'],
+        'cursor-oauth': ['CURSOR_OAUTH_CREDS_FILE_PATH'],
         'forward-api': ['FORWARD_API_KEY', 'FORWARD_BASE_URL', 'FORWARD_HEADER_NAME', 'FORWARD_HEADER_VALUE_PREFIX']
     };
     
@@ -713,6 +714,8 @@ function getFieldOrder(provider) {
             providerType = 'openai-codex-oauth';
         } else if (provider.GROK_COOKIE_TOKEN) {
             providerType = 'grok-custom';
+        } else if (provider.CURSOR_OAUTH_CREDS_FILE_PATH) {
+            providerType = 'cursor-oauth';
         } else if (provider.FORWARD_API_KEY) {
             providerType = 'forward-api';
         }

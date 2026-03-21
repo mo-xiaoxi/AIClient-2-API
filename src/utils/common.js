@@ -73,6 +73,7 @@ export const MODEL_PROVIDER = {
     CODEX_API: 'openai-codex-oauth',
     FORWARD_API: 'forward-api',
     GROK_CUSTOM: 'grok-custom',
+    CURSOR_OAUTH: 'cursor-oauth',
     AUTO: 'auto',
 }
 
@@ -86,6 +87,11 @@ export function getProtocolPrefix(provider) {
     // Special case for Codex - it needs its own protocol
     if (provider === 'openai-codex-oauth') {
         return 'codex';
+    }
+
+    // Cursor OAuth uses OpenAI-compatible protocol — no format conversion needed
+    if (provider === 'cursor-oauth') {
+        return 'openai';
     }
 
     const hyphenIndex = provider.indexOf('-');

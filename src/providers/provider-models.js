@@ -106,6 +106,20 @@ export const PROVIDER_MODELS = {
         'grok-imagine-1.0',
         'grok-imagine-1.0-edit',
         'grok-imagine-1.0-video'
+    ],
+    'cursor-oauth': [
+        'composer-2',
+        'claude-4-sonnet',
+        'claude-3.5-sonnet',
+        'gpt-4o',
+        'cursor-small',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gpt-4.5-preview',
+        'o3',
+        'o4-mini',
+        'deepseek-r1',
+        'deepseek-v3'
     ]
 };
 

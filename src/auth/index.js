@@ -33,3 +33,10 @@ export {
     handleIFlowOAuth,
     refreshIFlowTokens
 } from './iflow-oauth.js';
+
+// Cursor OAuth
+export {
+    handleCursorOAuth,
+    generateCursorAuthParams,
+    refreshCursorToken
+} from './cursor-oauth.js';

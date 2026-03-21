@@ -88,6 +88,17 @@ export const PROVIDER_MAPPINGS = [
         displayName: 'Grok Reverse',
         needsProjectId: false,
         urlKeys: ['GROK_BASE_URL', 'GROK_CF_CLEARANCE', 'GROK_USER_AGENT']
+    },
+    {
+        // Cursor OAuth 配置
+        dirName: 'cursor',
+        patterns: ['configs/cursor/', '/cursor/'],
+        providerType: 'cursor-oauth',
+        credPathKey: 'CURSOR_OAUTH_CREDS_FILE_PATH',
+        defaultCheckModel: 'claude-3.5-sonnet',
+        displayName: 'Cursor OAuth',
+        needsProjectId: false,
+        urlKeys: []
     }
 ];
 

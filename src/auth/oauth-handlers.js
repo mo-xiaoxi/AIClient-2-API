@@ -24,4 +24,8 @@ export {
     // iFlow OAuth
     handleIFlowOAuth,
     refreshIFlowTokens,
+    // Cursor OAuth
+    handleCursorOAuth,
+    generateCursorAuthParams,
+    refreshCursorToken,
 } from './index.js';

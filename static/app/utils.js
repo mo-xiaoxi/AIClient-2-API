@@ -57,11 +57,18 @@ function getProviderConfigs(supportedProviders = []) {
             defaultPath: 'configs/iflow/',
             visible: supportedProviders.includes('openai-iflow') 
         },
-        { 
-            id: 'grok-custom', 
-            name: t('dashboard.routing.nodeName.grok'), 
+        {
+            id: 'grok-custom',
+            name: t('dashboard.routing.nodeName.grok'),
             icon: 'fa-user-secret',
-            visible: supportedProviders.includes('grok-custom') 
+            visible: supportedProviders.includes('grok-custom')
+        },
+        {
+            id: 'cursor-oauth',
+            name: t('dashboard.routing.nodeName.cursor'),
+            icon: 'fa-mouse-pointer',
+            defaultPath: 'configs/cursor/',
+            visible: supportedProviders.includes('cursor-oauth')
         },
         { 
             id: 'openai-custom', 
@@ -390,6 +397,15 @@ function getProviderTypeFields(providerType) {
                 label: `${t('modal.provider.field.grokBaseUrl')} <span class="optional-tag">${t('config.optional')}</span>`,
                 type: 'text',
                 placeholder: 'https://grok.com'
+            }
+        ],
+        'cursor-oauth': [
+            {
+                id: 'CURSOR_OAUTH_CREDS_FILE_PATH',
+                label: 'Cursor Token File Path',
+                type: 'text',
+                placeholder: 'configs/cursor/xxxx_cursor-auth-token/xxxx_cursor-auth-token.json',
+                readonly: true
             }
         ],
         'forward-api': [
