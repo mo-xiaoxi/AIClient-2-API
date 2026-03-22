@@ -4,40 +4,23 @@
  * Tests: end-stream error handling in non-streaming and streaming paths,
  *        ensuring Cursor API errors are properly surfaced instead of
  *        silently returning empty content.
+ *
+ * ESM: jest.unstable_mockModule + dynamic import (CI runs in ESM mode).
  */
 
+import { jest, describe, test, expect, beforeAll, beforeEach, afterEach } from '@jest/globals';
 import { EventEmitter } from 'node:events';
-import { CONNECT_END_STREAM_FLAG } from '../../src/providers/cursor/cursor-protobuf.js';
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Constants (hardcoded to avoid import-order issues with mocks)
 // ---------------------------------------------------------------------------
 
-// Mock logger
-jest.mock('../../src/utils/logger.js', () => {
-    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
-    return { __esModule: true, default: logger };
-});
+const CONNECT_END_STREAM_FLAG = 0x02;
 
-// Mock cursor-token-store
-jest.mock('../../src/providers/cursor/cursor-token-store.js', () => ({
-    CursorTokenStore: jest.fn().mockImplementation(() => ({
-        initialize: jest.fn(),
-        getValidAccessToken: jest.fn().mockResolvedValue('mock-token'),
-        isExpiryDateNear: jest.fn().mockReturnValue(false),
-    })),
-}));
+// ---------------------------------------------------------------------------
+// Controllable fake H2 stream / client
+// ---------------------------------------------------------------------------
 
-// Mock cursor-session
-jest.mock('../../src/providers/cursor/cursor-session.js', () => ({
-    deriveSessionKey: jest.fn().mockReturnValue('session-key'),
-    getSession: jest.fn().mockReturnValue(null),
-    removeSession: jest.fn(),
-    saveSession: jest.fn(),
-    cleanupSession: jest.fn(),
-}));
-
-// We need a controllable fake H2 stream
 function createMockH2Stream() {
     const stream = new EventEmitter();
     stream.write = jest.fn();
@@ -51,60 +34,12 @@ function createMockH2Client() {
     return { close: jest.fn() };
 }
 
-// Mock h2RequestStream
 const mockH2Stream = createMockH2Stream();
-const mockH2Client = createMockH2Client();
-
-jest.mock('../../src/providers/cursor/cursor-h2.js', () => ({
-    h2RequestStream: jest.fn().mockReturnValue({
-        client: mockH2Client,
-        stream: mockH2Stream,
-    }),
-}));
-
-// Mock protobuf functions (keep CONNECT_END_STREAM_FLAG real)
-jest.mock('../../src/providers/cursor/cursor-protobuf.js', () => {
-    const actual = jest.requireActual('../../src/providers/cursor/cursor-protobuf.js');
-    return {
-        ...actual,
-        parseMessages: jest.fn().mockReturnValue({
-            systemPrompt: 'You are a helpful assistant.',
-            userText: 'Hello',
-            images: [],
-            turns: [],
-            toolResults: [],
-        }),
-        buildCursorAgentRequest: jest.fn().mockReturnValue({
-            requestBytes: Buffer.from('mock-request'),
-            blobStore: new Map(),
-        }),
-        buildHeartbeatBytes: jest.fn().mockReturnValue(Buffer.from('heartbeat')),
-        buildMcpToolDefinitions: jest.fn().mockReturnValue([]),
-        frameConnectMessage: jest.fn().mockReturnValue(Buffer.from('framed')),
-        processAgentServerMessage: jest.fn(),
-    };
-});
-
-// Mock protobuf runtime (agent_pb.js)
-jest.mock('../../src/providers/cursor/proto/agent_pb.js', () => ({
-    GetUsableModelsRequestSchema: {},
-    GetUsableModelsResponseSchema: {},
-}));
-
-jest.mock('@bufbuild/protobuf', () => ({
-    create: jest.fn(),
-    fromBinary: jest.fn(),
-    toBinary: jest.fn().mockReturnValue(Buffer.from('mock')),
-}));
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers — frame builders
 // ---------------------------------------------------------------------------
 
-/**
- * Build a binary frame with the given flags and JSON payload.
- * Format: [flags:1byte][length:4bytes BE][payload]
- */
 function buildFrame(flags, payload) {
     const payloadBuf = typeof payload === 'string' ? Buffer.from(payload, 'utf8') : payload;
     const header = Buffer.alloc(5);
@@ -113,12 +48,11 @@ function buildFrame(flags, payload) {
     return Buffer.concat([header, payloadBuf]);
 }
 
-/** Build a Cursor-style error end-stream frame */
 function buildErrorEndStreamFrame(errorMessage, modelName) {
     const payload = JSON.stringify({
         error: {
             code: 'not_found',
-            message: 'Error',
+            message: errorMessage,
             details: [{
                 type: 'aiserver.v1.ErrorDetails',
                 debug: {
@@ -136,23 +70,91 @@ function buildErrorEndStreamFrame(errorMessage, modelName) {
     return buildFrame(CONNECT_END_STREAM_FLAG, payload);
 }
 
-/** Build a normal end-stream frame (no error) */
 function buildNormalEndStreamFrame() {
     return buildFrame(CONNECT_END_STREAM_FLAG, '{}');
 }
 
-/** Build a normal data frame (flags=0) */
 function buildDataFrame(payload) {
     return buildFrame(0x00, payload || 'mock-protobuf-data');
 }
 
 // ---------------------------------------------------------------------------
-// Import CursorApiService after mocks
+// Mocks + dynamic imports
 // ---------------------------------------------------------------------------
 
 let CursorApiService;
+let mockProcessAgentServerMessage;
 
 beforeAll(async () => {
+    // Logger
+    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+        __esModule: true,
+        default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+    }));
+
+    // Token store
+    await jest.unstable_mockModule('../../src/providers/cursor/cursor-token-store.js', () => ({
+        CursorTokenStore: jest.fn().mockImplementation(() => ({
+            initialize: jest.fn(),
+            getValidAccessToken: jest.fn(async () => 'mock-token'),
+            isExpiryDateNear: jest.fn(() => false),
+        })),
+    }));
+
+    // Session
+    await jest.unstable_mockModule('../../src/providers/cursor/cursor-session.js', () => ({
+        deriveSessionKey: jest.fn(() => 'session-key'),
+        getSession: jest.fn(() => null),
+        removeSession: jest.fn(),
+        saveSession: jest.fn(),
+        cleanupSession: jest.fn(),
+    }));
+
+    // H2
+    await jest.unstable_mockModule('../../src/providers/cursor/cursor-h2.js', () => ({
+        h2RequestStream: jest.fn(() => ({
+            client: createMockH2Client(),
+            stream: mockH2Stream,
+        })),
+    }));
+
+    // Protobuf helpers — keep CONNECT_END_STREAM_FLAG, mock the rest
+    mockProcessAgentServerMessage = jest.fn();
+    await jest.unstable_mockModule('../../src/providers/cursor/cursor-protobuf.js', () => ({
+        CONNECT_END_STREAM_FLAG,
+        parseMessages: jest.fn(() => ({
+            systemPrompt: 'You are a helpful assistant.',
+            userText: 'Hello',
+            images: [],
+            turns: [],
+            toolResults: [],
+        })),
+        buildCursorAgentRequest: jest.fn(() => ({
+            requestBytes: Buffer.from('mock-request'),
+            blobStore: new Map(),
+        })),
+        buildHeartbeatBytes: jest.fn(() => Buffer.from('heartbeat')),
+        buildMcpToolDefinitions: jest.fn(() => []),
+        frameConnectMessage: jest.fn(() => Buffer.from('framed')),
+        parseConnectFrame: jest.fn(() => null),
+        processAgentServerMessage: mockProcessAgentServerMessage,
+        buildToolResultFrames: jest.fn(() => []),
+    }));
+
+    // Proto schemas
+    await jest.unstable_mockModule('../../src/providers/cursor/proto/agent_pb.js', () => ({
+        GetUsableModelsRequestSchema: {},
+        GetUsableModelsResponseSchema: {},
+    }));
+
+    // @bufbuild/protobuf
+    await jest.unstable_mockModule('@bufbuild/protobuf', () => ({
+        create: jest.fn(),
+        fromBinary: jest.fn(),
+        toBinary: jest.fn(() => Buffer.from('mock')),
+    }));
+
+    // Now import the module under test
     const mod = await import('../../src/providers/cursor/cursor-core.js');
     CursorApiService = mod.CursorApiService;
 });
@@ -172,25 +174,16 @@ describe('CursorApiService — end-stream error handling', () => {
     let service;
 
     beforeEach(() => {
-        // Reset stream state
         mockH2Stream.removeAllListeners();
         mockH2Stream.closed = false;
         mockH2Stream.destroyed = false;
         mockH2Stream.write.mockClear();
-        mockH2Client.close.mockClear();
-
-        // Re-wire mock so each test gets fresh listeners
-        const { h2RequestStream } = require('../../src/providers/cursor/cursor-h2.js');
-        h2RequestStream.mockReturnValue({
-            client: createMockH2Client(),
-            stream: mockH2Stream,
-        });
+        mockProcessAgentServerMessage.mockReset();
 
         service = new CursorApiService({
             CURSOR_OAUTH_CREDS_FILE_PATH: './configs/cursor/fake/token.json',
             uuid: 'test-uuid',
         });
-        // Mark as initialized
         service._initialized = true;
     });
 
@@ -206,13 +199,8 @@ describe('CursorApiService — end-stream error handling', () => {
 
             const promise = service.generateContent('invalid-model', requestBody);
 
-            // Simulate Cursor returning an error end-stream frame
             process.nextTick(() => {
-                const errorFrame = buildErrorEndStreamFrame(
-                    'Error',
-                    'invalid-model',
-                );
-                mockH2Stream.emit('data', errorFrame);
+                mockH2Stream.emit('data', buildErrorEndStreamFrame('Error', 'invalid-model'));
             });
 
             await expect(promise).rejects.toThrow('Model name is not valid: "invalid-model"');
@@ -238,8 +226,7 @@ describe('CursorApiService — end-stream error handling', () => {
         });
 
         test('should resolve normally when end-stream frame has no error', async () => {
-            const { processAgentServerMessage } = require('../../src/providers/cursor/cursor-protobuf.js');
-            processAgentServerMessage.mockImplementation((msgBytes, callbacks) => {
+            mockProcessAgentServerMessage.mockImplementation((msgBytes, callbacks) => {
                 callbacks.onText('Hello there!');
             });
 
@@ -250,9 +237,7 @@ describe('CursorApiService — end-stream error handling', () => {
             const promise = service.generateContent('claude-4-sonnet', requestBody);
 
             process.nextTick(() => {
-                // Send a data frame first (triggers onText)
                 mockH2Stream.emit('data', buildDataFrame('mock-protobuf'));
-                // Then send normal end-stream and close
                 mockH2Stream.emit('data', buildNormalEndStreamFrame());
                 mockH2Stream.emit('end');
             });
@@ -270,7 +255,6 @@ describe('CursorApiService — end-stream error handling', () => {
             const promise = service.generateContent('claude-4-sonnet', requestBody);
 
             process.nextTick(() => {
-                // End stream with non-JSON (should not throw, just continue)
                 mockH2Stream.emit('data', buildFrame(CONNECT_END_STREAM_FLAG, 'not-json'));
                 mockH2Stream.emit('end');
             });
@@ -317,7 +301,6 @@ describe('CursorApiService — end-stream error handling', () => {
             const mid = Math.floor(fullFrame.length / 2);
 
             process.nextTick(() => {
-                // Send frame in two parts
                 mockH2Stream.emit('data', fullFrame.subarray(0, mid));
                 mockH2Stream.emit('data', fullFrame.subarray(mid));
             });
@@ -326,8 +309,7 @@ describe('CursorApiService — end-stream error handling', () => {
         });
 
         test('should handle multiple frames in single data event', async () => {
-            const { processAgentServerMessage } = require('../../src/providers/cursor/cursor-protobuf.js');
-            processAgentServerMessage.mockImplementation((msgBytes, callbacks) => {
+            mockProcessAgentServerMessage.mockImplementation((msgBytes, callbacks) => {
                 callbacks.onText('chunk');
             });
 
@@ -338,7 +320,6 @@ describe('CursorApiService — end-stream error handling', () => {
             const promise = service.generateContent('claude-4-sonnet', requestBody);
 
             process.nextTick(() => {
-                // Combine data frame + end-stream frame in one event
                 const dataFrame = buildDataFrame('proto-data');
                 const endFrame = buildNormalEndStreamFrame();
                 const combined = Buffer.concat([dataFrame, endFrame]);
