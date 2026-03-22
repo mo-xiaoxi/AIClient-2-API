@@ -5,6 +5,7 @@ export default {
   },
   transformIgnorePatterns: [
     '/node_modules/(?!(uuid|@bufbuild)/)', // ESM modules that need to be transformed
+    '/src/utils/tls-sidecar\\.js$', // keep native import.meta.url (babel import-meta plugin breaks under Jest ESM)
   ],
   globals: {
     'jest': {

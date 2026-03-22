@@ -2,42 +2,42 @@
  * Unit tests for cursor-oauth.js
  *
  * Tests: generateCursorAuthParams, refreshCursorToken, handleCursorOAuth.
- * External dependencies (fetch, broadcastEvent, autoLinkProviderConfigs) are mocked.
- *
- * NOTE: Must use jest.mock() (hoisted by babel-jest) instead of jest.unstable_mockModule()
- * because this project's transitive import chain (service-manager → adapter → tls-sidecar)
- * uses import.meta.url which fails under babel-jest transformation.
- * jest.mock() with __esModule:true correctly intercepts before any module loads.
+ * ESM: jest.unstable_mockModule + dynamic import (jest.mock → require is not defined).
  */
 
-import { jest, describe, test, expect, beforeEach, afterAll } from '@jest/globals';
+import { jest, describe, test, expect, beforeEach, beforeAll, afterAll } from '@jest/globals';
 
-// jest.mock is hoisted by babel-jest — all factories must be self-contained (no external vars)
-jest.mock('../../src/utils/logger.js', () => ({
-    __esModule: true,
-    default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-}));
+let generateCursorAuthParams;
+let refreshCursorToken;
+let handleCursorOAuth;
 
-jest.mock('../../src/services/ui-manager.js', () => ({
-    __esModule: true,
-    broadcastEvent: () => {},
-}));
-
-jest.mock('../../src/services/service-manager.js', () => ({
-    __esModule: true,
-    autoLinkProviderConfigs: () => Promise.resolve(),
-}));
-
-jest.mock('../../src/core/config-manager.js', () => ({
-    __esModule: true,
-    CONFIG: { someKey: 'someValue' },
-}));
-
-import {
-    generateCursorAuthParams,
-    refreshCursorToken,
-    handleCursorOAuth,
-} from '../../src/auth/cursor-oauth.js';
+beforeAll(async () => {
+    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+        __esModule: true,
+        default: {
+            info: () => {},
+            warn: () => {},
+            error: () => {},
+            debug: () => {},
+        },
+    }));
+    await jest.unstable_mockModule('../../src/services/ui-manager.js', () => ({
+        __esModule: true,
+        broadcastEvent: () => {},
+    }));
+    await jest.unstable_mockModule('../../src/services/service-manager.js', () => ({
+        __esModule: true,
+        autoLinkProviderConfigs: () => Promise.resolve(),
+    }));
+    await jest.unstable_mockModule('../../src/core/config-manager.js', () => ({
+        __esModule: true,
+        CONFIG: { someKey: 'someValue' },
+    }));
+    const mod = await import('../../src/auth/cursor-oauth.js');
+    generateCursorAuthParams = mod.generateCursorAuthParams;
+    refreshCursorToken = mod.refreshCursorToken;
+    handleCursorOAuth = mod.handleCursorOAuth;
+});
 
 // ============================================================================
 // Tests

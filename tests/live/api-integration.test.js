@@ -7,16 +7,18 @@ import { fetch } from 'undici';
  * instead of directly calling the program code. This provides true integration testing.
  * 
  * Configuration:
- * - TEST_SERVER_BASE_URL: The base URL of the running server
+ * - TEST_SERVER_BASE_URL: The base URL of the running server (default http://127.0.0.1:3000)
  * - TEST_API_KEY: The API key to use for authentication (should match server config)
+ *
+ * Run: `pnpm test:integration` (requires a reachable server; not part of default `pnpm test`).
  * 
  * Each test can include custom headers to test different scenarios.
  * Make sure the server is running at the specified URL before running tests.
  */
 
-// Test server configuration
-const TEST_SERVER_BASE_URL = 'http://192.168.1.232:3000';
-const TEST_API_KEY = '123456'; // You may need to adjust this based on your server config
+// Test server configuration (override via env when running `pnpm test:integration`)
+const TEST_SERVER_BASE_URL = process.env.TEST_SERVER_BASE_URL || 'http://127.0.0.1:3000';
+const TEST_API_KEY = process.env.TEST_API_KEY || '123456';
 const MODEL_PROVIDER = {
     // Model provider constants
     GEMINI_CLI: 'gemini-cli-oauth',

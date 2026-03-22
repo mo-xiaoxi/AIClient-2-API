@@ -114,9 +114,19 @@ import { getTLSSidecar } from '../utils/tls-sidecar.js';
  */
 
 import 'dotenv/config'; // Import dotenv and configure it
+import { pathToFileURL } from 'url';
 import '../converters/register-converters.js'; // 注册所有转换器
 import { getProviderPoolManager } from './service-manager.js';
 import { isRetryableNetworkError } from '../utils/common.js';
+
+function isMainApiServerModule() {
+    if (!process.argv[1]) return false;
+    try {
+        return pathToFileURL(process.argv[1]).href === import.meta.url;
+    } catch {
+        return false;
+    }
+}
 
 // 检测是否作为子进程运行
 const IS_WORKER_PROCESS = process.env.IS_WORKER_PROCESS === 'true';
@@ -177,6 +187,7 @@ function setupWorkerCommunication() {
  * 优雅关闭服务器
  */
 async function gracefulShutdown() {
+    const testMode = process.env.AICLIENT_TEST_SERVER === '1';
     logger.info('[Server] Initiating graceful shutdown...');
 
     // 停止 TLS sidecar
@@ -185,17 +196,28 @@ async function gracefulShutdown() {
     } catch { /* ignore */ }
 
     if (serverInstance) {
-        serverInstance.close(() => {
-            logger.info('[Server] HTTP server closed');
-            process.exit(0);
-        });
-
-        // 设置超时，防止无限等待
-        setTimeout(() => {
+        if (testMode) {
+            await new Promise((resolve) => {
+                serverInstance.close(() => {
+                    logger.info('[Server] HTTP server closed');
+                    resolve();
+                });
+            });
+            serverInstance = null;
+            return;
+        }
+        const forceExitTimer = setTimeout(() => {
             logger.info('[Server] Shutdown timeout, forcing exit...');
             process.exit(1);
         }, 10000);
-    } else {
+        serverInstance.close(() => {
+            clearTimeout(forceExitTimer);
+            logger.info('[Server] HTTP server closed');
+            process.exit(0);
+        });
+        return;
+    }
+    if (!testMode) {
         process.exit(0);
     }
 }
@@ -240,9 +262,16 @@ function setupSignalHandlers() {
 }
 
 // --- Server Initialization ---
-async function startServer() {
+/**
+ * @param {Object} [options]
+ * @param {string[]} [options.argv] - CLI args (default: process.argv.slice(2))
+ * @param {string} [options.configPath] - Default config file if no --config in argv
+ */
+export async function startServer(options = {}) {
+    const argv = options.argv ?? process.argv.slice(2);
+    const configPath = options.configPath ?? 'configs/config.json';
     // Initialize configuration
-    await initializeConfig(process.argv.slice(2), 'configs/config.json');
+    await initializeConfig(argv, configPath);
     
     // 自动关联 configs 目录中的配置文件到对应的提供商
     // logger.info('[Initialization] Checking for unlinked provider configs...');
@@ -299,7 +328,20 @@ async function startServer() {
 
     // 设置服务器的最大连接数
     serverInstance.maxConnections = 1000;
-    serverInstance.listen(CONFIG.SERVER_PORT, CONFIG.HOST, async () => {
+
+    const skipBrowserOpen = process.env.AICLIENT_TEST_SERVER === '1';
+
+    await new Promise((resolve, reject) => {
+        serverInstance.once('error', reject);
+        serverInstance.listen(CONFIG.SERVER_PORT, CONFIG.HOST, async () => {
+            serverInstance.off('error', reject);
+            resolve();
+        });
+    });
+
+    // listen 回调中的日志与副作用（在 Promise resolve 之后执行）
+    (async () => {
+        const listeningPort = serverInstance.address()?.port ?? CONFIG.SERVER_PORT;
         logger.info(`--- Unified API Server Configuration ---`);
         const configuredProviders = Array.isArray(CONFIG.DEFAULT_MODEL_PROVIDERS) && CONFIG.DEFAULT_MODEL_PROVIDERS.length > 0
             ? CONFIG.DEFAULT_MODEL_PROVIDERS
@@ -312,41 +354,40 @@ async function startServer() {
         logger.info(`  System Prompt File: ${CONFIG.SYSTEM_PROMPT_FILE_PATH || 'Default'}`);
         logger.info(`  System Prompt Mode: ${CONFIG.SYSTEM_PROMPT_MODE}`);
         logger.info(`  Host: ${CONFIG.HOST}`);
-        logger.info(`  Port: ${CONFIG.SERVER_PORT}`);
+        logger.info(`  Port: ${listeningPort}`);
         logger.info(`  Required API Key: ${CONFIG.REQUIRED_API_KEY}`);
         logger.info(`  Prompt Logging: ${CONFIG.PROMPT_LOG_MODE}${CONFIG.PROMPT_LOG_FILENAME ? ` (to ${CONFIG.PROMPT_LOG_FILENAME})` : ''}`);
         logger.info(`------------------------------------------`);
-        logger.info(`\nUnified API Server running on http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}`);
+        logger.info(`\nUnified API Server running on http://${CONFIG.HOST}:${listeningPort}`);
         logger.info(`Supports multiple API formats:`);
         logger.info(`  • OpenAI-compatible: /v1/chat/completions, /v1/responses, /v1/models`);
         logger.info(`  • Gemini-compatible: /v1beta/models, /v1beta/models/{model}:generateContent`);
         logger.info(`  • Claude-compatible: /v1/messages`);
         logger.info(`  • Health check: /health`);
-        logger.info(`  • UI Management Console: http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/`);
+        logger.info(`  • UI Management Console: http://${CONFIG.HOST}:${listeningPort}/`);
 
-        // Auto-open browser to UI (only if host is 0.0.0.0 or 127.0.0.1)
-        // if (CONFIG.HOST === '0.0.0.0' || CONFIG.HOST === '127.0.0.1') {
+        if (!skipBrowserOpen) {
             try {
                 const open = (await import('open')).default;
-                // 作为子进程启动时，需要更长的延迟确保服务完全就绪
                 const openDelay = IS_WORKER_PROCESS ? 3000 : 1000;
+                const port = listeningPort;
                 setTimeout(() => {
-                    let openUrl = `http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/login.html`;
-                    if(CONFIG.HOST === '0.0.0.0'){
-                        openUrl = `http://localhost:${CONFIG.SERVER_PORT}/login.html`;
+                    let openUrl = `http://${CONFIG.HOST}:${port}/login.html`;
+                    if (CONFIG.HOST === '0.0.0.0') {
+                        openUrl = `http://localhost:${port}/login.html`;
                     }
                     open(openUrl)
                         .then(() => {
                             logger.info('[UI] Opened login page in default browser');
                         })
-                        .catch(err => {
-                            logger.info('[UI] Please open manually: http://' + CONFIG.HOST + ':' + CONFIG.SERVER_PORT + '/login.html');
+                        .catch(() => {
+                            logger.info('[UI] Please open manually: http://' + CONFIG.HOST + ':' + port + '/login.html');
                         });
                 }, openDelay);
-            } catch (err) {
-                logger.info(`[UI] Login page available at: http://${CONFIG.HOST}:${CONFIG.SERVER_PORT}/login.html`);
+            } catch {
+                logger.info(`[UI] Login page available at: http://${CONFIG.HOST}:${listeningPort}/login.html`);
             }
-        // }
+        }
 
         if (CONFIG.CRON_REFRESH_TOKEN) {
             logger.info(`  • Cron Near Minutes: ${CONFIG.CRON_NEAR_MINUTES}`);
@@ -356,7 +397,7 @@ async function startServer() {
         }
         // 服务器完全启动后,执行初始健康检查
         const poolManager = getProviderPoolManager();
-        if (poolManager) {
+        if (poolManager && !skipBrowserOpen) {
             logger.info('[Initialization] Performing initial health checks for provider pools...');
             poolManager.performHealthChecks(true);
         }
@@ -365,20 +406,25 @@ async function startServer() {
         if (IS_WORKER_PROCESS) {
             sendToMaster({ type: 'ready', pid: process.pid });
         }
+    })().catch((err) => {
+        logger.error('[Server] Post-listen initialization error:', err.message);
     });
-    return serverInstance; // Return the server instance for testing purposes
+
+    return serverInstance;
 }
 
-// 设置信号处理
-setupSignalHandlers();
+if (isMainApiServerModule()) {
+    // 设置信号处理
+    setupSignalHandlers();
 
-// 设置子进程通信
-setupWorkerCommunication();
+    // 设置子进程通信
+    setupWorkerCommunication();
 
-startServer().catch(err => {
-    logger.error("[Server] Failed to start server:", err.message);
-    process.exit(1);
-});
+    startServer().catch(err => {
+        logger.error("[Server] Failed to start server:", err.message);
+        process.exit(1);
+    });
+}
 
 // 导出用于外部调用
 export { gracefulShutdown, sendToMaster };

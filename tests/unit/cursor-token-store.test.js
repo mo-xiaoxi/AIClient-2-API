@@ -3,29 +3,33 @@
  *
  * Tests: CursorTokenStore — initialization, token caching, expiry detection,
  *        concurrent refresh deduplication, refresh failure handling.
- *
- * NOTE: Must use jest.mock() (hoisted by babel-jest) instead of jest.unstable_mockModule()
- * because this project's transitive import chain uses import.meta.url which fails under
- * babel-jest. Variables referenced in jest.mock factories must be prefixed with "mock".
+ * ESM: jest.unstable_mockModule + dynamic import.
  */
 
-import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+import { jest, describe, test, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import { promises as fs } from 'node:fs';
 
-// jest.mock is hoisted by babel-jest — all factories must be self-contained
-jest.mock('../../src/utils/logger.js', () => ({
-    __esModule: true,
-    default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-}));
+const mockRefreshFn = jest.fn();
 
-// Variable name MUST start with "mock" for jest.mock hoisting to allow external reference
-let mockRefreshFn;
-jest.mock('../../src/auth/cursor-oauth.js', () => ({
-    __esModule: true,
-    refreshCursorToken: (...args) => mockRefreshFn(...args),
-}));
+let CursorTokenStore;
 
-import { CursorTokenStore } from '../../src/providers/cursor/cursor-token-store.js';
+beforeAll(async () => {
+    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+        __esModule: true,
+        default: {
+            info: () => {},
+            warn: () => {},
+            error: () => {},
+            debug: () => {},
+        },
+    }));
+    await jest.unstable_mockModule('../../src/auth/cursor-oauth.js', () => ({
+        __esModule: true,
+        refreshCursorToken: (...args) => mockRefreshFn(...args),
+    }));
+    const mod = await import('../../src/providers/cursor/cursor-token-store.js');
+    CursorTokenStore = mod.CursorTokenStore;
+});
 
 // ============================================================================
 // Test helpers
@@ -62,7 +66,7 @@ describe('CursorTokenStore', () => {
     let unlinkSpy;
 
     beforeEach(() => {
-        mockRefreshFn = jest.fn();
+        mockRefreshFn.mockReset();
         store = new CursorTokenStore('/tmp/test-cursor-tokens.json');
         readFileSpy = jest.spyOn(fs, 'readFile');
         writeFileSpy = jest.spyOn(fs, 'writeFile');

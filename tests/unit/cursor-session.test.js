@@ -5,27 +5,40 @@
  *        cleanupSession, removeAndCleanupSession, cleanupAllSessions,
  *        getActiveSessionCount, session expiry.
  *
- * NOTE: Must use jest.mock() (hoisted by babel-jest) instead of jest.unstable_mockModule()
- * because this project's import chain uses import.meta.url which fails under babel-jest.
+ * ESM: use jest.unstable_mockModule + dynamic import (jest.mock uses require and breaks).
  */
 
-import { jest, describe, test, expect, afterEach } from '@jest/globals';
+import { jest, describe, test, expect, afterEach, beforeAll } from '@jest/globals';
 
-jest.mock('../../src/utils/logger.js', () => ({
-    __esModule: true,
-    default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-}));
+let deriveSessionKey;
+let saveSession;
+let getSession;
+let removeSession;
+let cleanupSession;
+let removeAndCleanupSession;
+let cleanupAllSessions;
+let getActiveSessionCount;
 
-import {
-    deriveSessionKey,
-    saveSession,
-    getSession,
-    removeSession,
-    cleanupSession,
-    removeAndCleanupSession,
-    cleanupAllSessions,
-    getActiveSessionCount,
-} from '../../src/providers/cursor/cursor-session.js';
+beforeAll(async () => {
+    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+        __esModule: true,
+        default: {
+            info: () => {},
+            warn: () => {},
+            error: () => {},
+            debug: () => {},
+        },
+    }));
+    const mod = await import('../../src/providers/cursor/cursor-session.js');
+    deriveSessionKey = mod.deriveSessionKey;
+    saveSession = mod.saveSession;
+    getSession = mod.getSession;
+    removeSession = mod.removeSession;
+    cleanupSession = mod.cleanupSession;
+    removeAndCleanupSession = mod.removeAndCleanupSession;
+    cleanupAllSessions = mod.cleanupAllSessions;
+    getActiveSessionCount = mod.getActiveSessionCount;
+});
 
 // ============================================================================
 // Test helpers
