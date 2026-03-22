@@ -238,6 +238,17 @@ function getAvailableRoutes() {
             description: t('dashboard.routing.free'),
             badge: t('dashboard.routing.free'),
             badgeClass: 'oauth'
+        },
+        {
+            provider: 'cursor-oauth',
+            name: 'Cursor OAuth',
+            paths: {
+                openai: '/cursor-oauth/v1/chat/completions',
+                claude: '/cursor-oauth/v1/messages'
+            },
+            description: t('dashboard.routing.free'),
+            badge: 'OAuth',
+            badgeClass: 'oauth'
         }
     ];
 }
@@ -395,6 +406,27 @@ async function copyCurlExample(provider, options = {}) {
   }'`;
             }
             break;
+        case 'cursor-oauth':
+            if (protocol === 'openai') {
+                curlCommand = `curl http://localhost:3000${path} \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "claude-3.5-sonnet",
+    "messages": [{"role": "user", "content": "${message}"}],
+    "stream": true
+  }'`;
+            } else {
+                curlCommand = `curl http://localhost:3000${path} \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: YOUR_API_KEY" \\
+  -d '{
+    "model": "claude-3.5-sonnet",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "${message}"}]
+  }'`;
+            }
+            break;
     }
     
     try {
@@ -431,7 +463,8 @@ function renderRoutingExamples(providerConfigs) {
         'openaiResponses-custom': 'fa-comment-alt',
         'openai-iflow': 'fa-wind',
         'openai-codex-oauth': 'fa-keyboard',
-        'grok-custom': 'fa-search'
+        'grok-custom': 'fa-search',
+        'cursor-oauth': 'fa-mouse-pointer'
     };
 
     // 默认模型映射 (用于 curl 示例)
@@ -445,6 +478,7 @@ function renderRoutingExamples(providerConfigs) {
         'openai-iflow': 'qwen3-max',
         'openai-codex-oauth': 'gpt-5',
         'grok-custom': 'grok-3',
+        'cursor-oauth': 'claude-3.5-sonnet',
         'openaiResponses-custom': 'gpt-4o'
     };
 

@@ -1,7 +1,30 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Build / test output
+coverage/
+playwright-report/
+test-results/
+
+# Runtime logs
+logs/
+
+# Environment & secrets (local)
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+
+# Tools / agents
 .serena/
-.claude/
-CLAUDE.md
+
+# Local configs & credentials（勿提交真实配置；示例文件用 *.example）
 config.json
 provider_pools.json
 plugins.json
@@ -13,6 +36,6 @@ usage-cache.json
 *-auth-token.json
 api-potluck-keys.json
 api-potluck-data.json
+
 # Codex credentials
 configs/codex/
-

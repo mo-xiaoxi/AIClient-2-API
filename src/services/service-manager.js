@@ -292,6 +292,7 @@ export async function initApiService(config, isReady = false) {
 
         // 健康检查将在服务器完全启动后执行
     } else {
+        providerPoolManager = null;
         logger.info('[Initialization] No provider pools configured. Using single provider mode.');
     }
 
