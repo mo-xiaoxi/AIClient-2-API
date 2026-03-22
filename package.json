@@ -33,7 +33,7 @@
     "start:standalone": "node src/services/api-server.js",
     "start:dev": "node src/core/master.js --dev",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest tests/unit",
-    "test:all": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --testPathIgnorePatterns=/node_modules/ --testPathIgnorePatterns=/tests/live/ --testPathIgnorePatterns=/tests/e2e/api/ --testPathIgnorePatterns=/tests/e2e/ui/ --forceExit",
+    "test:all": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand --testPathIgnorePatterns=/node_modules/ --testPathIgnorePatterns=/tests/live/ --testPathIgnorePatterns=/tests/e2e/api/ --testPathIgnorePatterns=/tests/e2e/ui/ --testPathIgnorePatterns=/\\.claude\\/worktrees\\// --forceExit",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest tests/unit --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest tests/unit --coverage",
     "test:verbose": "NODE_OPTIONS=--experimental-vm-modules jest tests/unit --verbose",
