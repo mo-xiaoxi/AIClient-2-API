@@ -21,7 +21,12 @@ export default {
   collectCoverageFrom: [
     'src/**/*.js',
     '!src/**/*.test.js',
-    '!**/node_modules/**'
+    '!**/node_modules/**',
+    '!src/core/master.js',
+    '!src/utils/tls-sidecar.js',
+    '!src/scripts/**',
+    '!src/convert/convert-old.js',
+    '!src/providers/cursor/proto/**',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
