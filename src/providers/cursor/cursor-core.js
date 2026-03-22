@@ -272,7 +272,18 @@ export class CursorApiService {
                     if (pendingBuffer.length < 5 + msgLen) break;
                     const msgBytes = pendingBuffer.subarray(5, 5 + msgLen);
                     pendingBuffer = pendingBuffer.subarray(5 + msgLen);
-                    if (flags & CONNECT_END_STREAM_FLAG) continue;
+                    if (flags & CONNECT_END_STREAM_FLAG) {
+                        try {
+                            const endPayload = JSON.parse(msgBytes.toString('utf8'));
+                            if (endPayload?.error) {
+                                const detail = endPayload.error.details?.[0]?.debug?.details?.detail || endPayload.error.message;
+                                logger.error(`[CursorApiService] Cursor API error: ${detail}`);
+                                reject(Object.assign(new Error(detail), { status: 400 }));
+                                return;
+                            }
+                        } catch {}
+                        continue;
+                    }
                     try {
                         processAgentServerMessage(msgBytes, {
                             blobStore,
@@ -518,7 +529,17 @@ export class CursorApiService {
                     if (pendingBuffer.length < 5 + msgLen) break;
                     const msgBytes = pendingBuffer.subarray(5, 5 + msgLen);
                     pendingBuffer = pendingBuffer.subarray(5 + msgLen);
-                    if (flags & CONNECT_END_STREAM_FLAG) continue;
+                    if (flags & CONNECT_END_STREAM_FLAG) {
+                        try {
+                            const endPayload = JSON.parse(msgBytes.toString('utf8'));
+                            if (endPayload?.error) {
+                                const detail = endPayload.error.details?.[0]?.debug?.details?.detail || endPayload.error.message;
+                                logger.error(`[CursorApiService] Cursor streaming API error: ${detail}`);
+                                throw Object.assign(new Error(detail), { status: 400 });
+                            }
+                        } catch (e) { if (e.status) throw e; }
+                        continue;
+                    }
                     try {
                         processAgentServerMessage(msgBytes, {
                             blobStore,
