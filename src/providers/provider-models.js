@@ -107,21 +107,17 @@ export const PROVIDER_MODELS = {
         'grok-imagine-1.0-edit',
         'grok-imagine-1.0-video'
     ],
-    'cursor-oauth': [
-        'composer-2',
-        'claude-4-sonnet',
-        'claude-3.5-sonnet',
-        'gpt-4o',
-        'cursor-small',
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        'gpt-4.5-preview',
-        'o3',
-        'o4-mini',
-        'deepseek-r1',
-        'deepseek-v3'
-    ]
+    // cursor-oauth: 模型列表通过 Cursor API 动态获取，静态列表仅作 fallback
+    'cursor-oauth': []
 };
+
+/**
+ * 标记为需要动态获取模型列表的提供商类型
+ * 这些提供商的静态列表仅作 fallback，UI 会优先通过 adapter.listModels() 实时拉取
+ */
+export const DYNAMIC_MODEL_PROVIDERS = [
+    'cursor-oauth',
+];
 
 /**
  * 获取指定提供商类型支持的模型列表
