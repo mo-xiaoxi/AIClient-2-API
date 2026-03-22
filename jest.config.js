@@ -4,7 +4,7 @@ export default {
     '^.+\\.(js|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!(uuid)/)', // uuid is an ESM module that needs to be transformed
+    '/node_modules/(?!(uuid|@bufbuild)/)', // ESM modules that need to be transformed
   ],
   globals: {
     'jest': {
@@ -24,5 +24,9 @@ export default {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  testTimeout: 30000 // Add a global test timeout
+  testTimeout: 30000, // Add a global test timeout
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/tests/live/',
+  ],
 };
