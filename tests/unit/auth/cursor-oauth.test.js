@@ -12,7 +12,7 @@ let refreshCursorToken;
 let handleCursorOAuth;
 
 beforeAll(async () => {
-    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+    await jest.unstable_mockModule('../../../src/utils/logger.js', () => ({
         __esModule: true,
         default: {
             info: () => {},
@@ -21,19 +21,19 @@ beforeAll(async () => {
             debug: () => {},
         },
     }));
-    await jest.unstable_mockModule('../../src/services/ui-manager.js', () => ({
+    await jest.unstable_mockModule('../../../src/services/ui-manager.js', () => ({
         __esModule: true,
         broadcastEvent: () => {},
     }));
-    await jest.unstable_mockModule('../../src/services/service-manager.js', () => ({
+    await jest.unstable_mockModule('../../../src/services/service-manager.js', () => ({
         __esModule: true,
         autoLinkProviderConfigs: () => Promise.resolve(),
     }));
-    await jest.unstable_mockModule('../../src/core/config-manager.js', () => ({
+    await jest.unstable_mockModule('../../../src/core/config-manager.js', () => ({
         __esModule: true,
         CONFIG: { someKey: 'someValue' },
     }));
-    const mod = await import('../../src/auth/cursor-oauth.js');
+    const mod = await import('../../../src/auth/cursor-oauth.js');
     generateCursorAuthParams = mod.generateCursorAuthParams;
     refreshCursorToken = mod.refreshCursorToken;
     handleCursorOAuth = mod.handleCursorOAuth;

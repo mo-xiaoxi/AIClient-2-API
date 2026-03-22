@@ -12,7 +12,7 @@ import {
     extractSystemPromptFromRequestBody,
     formatToLocal,
     handleError,
-} from '../../src/utils/common.js';
+} from '../../../src/utils/common.js';
 
 describe('isRetryableNetworkError', () => {
     test('returns false for null/undefined', () => {
