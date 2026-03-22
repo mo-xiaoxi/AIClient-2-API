@@ -44,6 +44,8 @@ const CURSOR_CLIENT_VERSION = 'cli-2026.02.13-41ac335';
 const GET_USABLE_MODELS_PATH = '/agent.v1.AgentService/GetUsableModels';
 
 const FALLBACK_MODELS = [
+    { id: 'auto', name: 'Auto (Smart Routing)' },
+    { id: 'premium', name: 'Premium (Smart Routing)' },
     { id: 'composer-2', name: 'Composer 2' },
     { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet' },
     { id: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
@@ -51,6 +53,9 @@ const FALLBACK_MODELS = [
     { id: 'cursor-small', name: 'Cursor Small' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
 ];
+
+// 模型缓存 TTL（5 分钟），避免缓存过期后无法获取新模型
+const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ============================================================================
 // CursorApiService
@@ -64,6 +69,7 @@ export class CursorApiService {
         this._tokenStore = null;
         this.isInitialized = false;
         this._cachedModels = null;
+        this._modelsCachedAt = 0;
     }
 
     // ---------- Lifecycle ----------
@@ -160,7 +166,10 @@ export class CursorApiService {
      * List available models. Returns OpenAI-format model list.
      */
     async listModels() {
-        if (this._cachedModels) return this._cachedModels;
+        // 缓存未过期时直接返回
+        if (this._cachedModels && (Date.now() - this._modelsCachedAt) < MODEL_CACHE_TTL_MS) {
+            return this._cachedModels;
+        }
 
         try {
             await this._ensureInitialized();
@@ -176,6 +185,7 @@ export class CursorApiService {
                     owned_by: 'cursor',
                 })),
             };
+            this._modelsCachedAt = Date.now();
         } catch (err) {
             logger.warn(`[CursorApiService] listModels failed, using fallback: ${err.message}`);
             this._cachedModels = {
@@ -187,6 +197,7 @@ export class CursorApiService {
                     owned_by: 'cursor',
                 })),
             };
+            this._modelsCachedAt = Date.now();
         }
 
         return this._cachedModels;

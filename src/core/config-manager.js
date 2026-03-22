@@ -8,7 +8,11 @@ export let PROMPT_LOG_FILENAME = ''; // Make PROMPT_LOG_FILENAME exportable
 
 const ALL_MODEL_PROVIDERS = Object.values(MODEL_PROVIDER);
 
-function normalizeConfiguredProviders(config) {
+/**
+ * Normalize MODEL_PROVIDER / DEFAULT_MODEL_PROVIDERS from config (exported for tests).
+ * @param {Object} config - Mutable config object
+ */
+export function normalizeConfiguredProviders(config) {
     const fallbackProvider = MODEL_PROVIDER.GEMINI_CLI;
     const dedupedProviders = [];
 
@@ -54,6 +58,15 @@ function normalizeConfiguredProviders(config) {
  * @returns {Object} The initialized configuration object.
  */
 export async function initializeConfig(args = process.argv.slice(2), configFilePath = 'configs/config.json') {
+    // Support: --config /path/to/config.json (consumes two argv entries)
+    let argv = Array.isArray(args) ? [...args] : [];
+    let resolvedConfigPath = configFilePath;
+    const cfgIdx = argv.indexOf('--config');
+    if (cfgIdx !== -1 && argv[cfgIdx + 1]) {
+        resolvedConfigPath = argv[cfgIdx + 1];
+        argv = argv.slice(0, cfgIdx).concat(argv.slice(cfgIdx + 2));
+    }
+
     const defaultConfig = {
         REQUIRED_API_KEY: "123456",
         SERVER_PORT: 3000,
@@ -95,10 +108,10 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
     let currentConfig = { ...defaultConfig };
 
     try {
-        const configData = fs.readFileSync(configFilePath, 'utf8');
+        const configData = fs.readFileSync(resolvedConfigPath, 'utf8');
         const loadedConfig = JSON.parse(configData);
         Object.assign(currentConfig, loadedConfig);
-        logger.info('[Config] Loaded configuration from configs/config.json');
+        logger.info(`[Config] Loaded configuration from ${resolvedConfigPath}`);
     } catch (error) {
         if (error.code !== 'ENOENT') {
             logger.error('[Config Error] Failed to load configs/config.json:', error.message);
@@ -130,16 +143,16 @@ export async function initializeConfig(args = process.argv.slice(2), configFileP
 
     // Parse command-line arguments using definitions
     const flagMap = new Map(cliArgDefs.map(def => [def.flag, def]));
-    for (let i = 0; i < args.length; i++) {
-        const def = flagMap.get(args[i]);
+    for (let i = 0; i < argv.length; i++) {
+        const def = flagMap.get(argv[i]);
         if (!def) continue;
 
-        if (i + 1 >= args.length) {
+        if (i + 1 >= argv.length) {
             logger.warn(`[Config Warning] ${def.flag} flag requires a value.`);
             continue;
         }
 
-        const rawValue = args[++i];
+        const rawValue = argv[++i];
         switch (def.type) {
             case 'string':
                 currentConfig[def.configKey] = rawValue;

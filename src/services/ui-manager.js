@@ -137,14 +137,14 @@ export async function handleUIApiRequests(method, pathParam, req, res, currentCo
 
     // Get available models for all providers or specific provider type
     if (method === 'GET' && pathParam === '/api/provider-models') {
-        return await providerApi.handleGetProviderModels(req, res);
+        return await providerApi.handleGetProviderModels(req, res, providerPoolManager);
     }
 
     // Get available models for a specific provider type
     const providerModelsMatch = pathParam.match(/^\/api\/provider-models\/([^\/]+)$/);
     if (method === 'GET' && providerModelsMatch) {
         const providerType = decodeURIComponent(providerModelsMatch[1]);
-        return await providerApi.handleGetProviderTypeModels(req, res, providerType);
+        return await providerApi.handleGetProviderTypeModels(req, res, providerType, providerPoolManager);
     }
 
     // Add new provider configuration

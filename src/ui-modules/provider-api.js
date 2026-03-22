@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import logger from '../utils/logger.js';
 import { getRequestBody } from '../utils/common.js';
-import { getAllProviderModels, getProviderModels } from '../providers/provider-models.js';
+import { getAllProviderModels, getProviderModels, DYNAMIC_MODEL_PROVIDERS } from '../providers/provider-models.js';
+import { getServiceAdapter } from '../providers/adapter.js';
 import { generateUUID, createProviderConfig, formatSystemPath, detectProviderFromPath, addToUsedPaths, isPathUsed, pathsEqual } from '../utils/provider-utils.js';
 import { broadcastEvent } from './event-broadcast.js';
 import { getRegisteredProviders } from '../providers/adapter.js';
@@ -67,20 +68,71 @@ export async function handleGetProviderType(req, res, currentConfig, providerPoo
 }
 
 /**
- * 获取所有提供商的可用模型
+ * 尝试从 provider adapter 动态获取模型列表（仅 id 数组）
+ * @param {string} providerType - 提供商类型
+ * @param {Object} providerPoolManager - 号池管理器
+ * @returns {Promise<string[]|null>} 模型 id 列表，失败返回 null
  */
-export async function handleGetProviderModels(req, res) {
-    const allModels = getAllProviderModels();
+async function fetchDynamicModels(providerType, providerPoolManager) {
+    try {
+        let targetConfig = providerPoolManager?.globalConfig || {};
+        const poolStatus = providerPoolManager?.providerStatus?.[providerType];
+        if (poolStatus && poolStatus.length > 0) {
+            const healthy = poolStatus.find(p => p.config?.isHealthy && !p.config?.isDisabled);
+            targetConfig = (healthy || poolStatus[0]).config;
+        }
+        const tempConfig = { ...providerPoolManager?.globalConfig, ...targetConfig, MODEL_PROVIDER: providerType };
+        const adapter = getServiceAdapter(tempConfig);
+        if (typeof adapter.listModels !== 'function') return null;
+        const nativeModels = await adapter.listModels();
+        if (nativeModels && Array.isArray(nativeModels.data)) {
+            return nativeModels.data.map(m => m.id);
+        }
+        return null;
+    } catch (err) {
+        logger.debug(`[ProviderAPI] Dynamic model fetch for ${providerType} failed: ${err.message}`);
+        return null;
+    }
+}
+
+/**
+ * 获取所有提供商的可用模型（支持动态获取）
+ */
+export async function handleGetProviderModels(req, res, providerPoolManager) {
+    const allModels = { ...getAllProviderModels() };
+
+    // 对标记为动态获取的提供商，尝试从 adapter 实时拉取
+    if (providerPoolManager) {
+        const dynamicFetches = DYNAMIC_MODEL_PROVIDERS
+            .filter(pt => allModels[pt] !== undefined)
+            .map(async (pt) => {
+                const dynamicModels = await fetchDynamicModels(pt, providerPoolManager);
+                if (dynamicModels && dynamicModels.length > 0) {
+                    allModels[pt] = dynamicModels;
+                }
+            });
+        await Promise.allSettled(dynamicFetches);
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(allModels));
     return true;
 }
 
 /**
- * 获取特定提供商类型的可用模型
+ * 获取特定提供商类型的可用模型（支持动态获取）
  */
-export async function handleGetProviderTypeModels(req, res, providerType) {
-    const models = getProviderModels(providerType);
+export async function handleGetProviderTypeModels(req, res, providerType, providerPoolManager) {
+    let models = getProviderModels(providerType);
+
+    // 若该提供商标记为动态获取，尝试实时拉取
+    if (DYNAMIC_MODEL_PROVIDERS.includes(providerType) && providerPoolManager) {
+        const dynamicModels = await fetchDynamicModels(providerType, providerPoolManager);
+        if (dynamicModels && dynamicModels.length > 0) {
+            models = dynamicModels;
+        }
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
         providerType,
