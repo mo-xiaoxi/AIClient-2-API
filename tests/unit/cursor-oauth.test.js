@@ -3,19 +3,24 @@
  *
  * Tests: generateCursorAuthParams, refreshCursorToken, handleCursorOAuth.
  * External dependencies (fetch, broadcastEvent, autoLinkProviderConfigs) are mocked.
+ *
+ * NOTE: Must use jest.mock() (hoisted by babel-jest) instead of jest.unstable_mockModule()
+ * because this project's transitive import chain (service-manager → adapter → tls-sidecar)
+ * uses import.meta.url which fails under babel-jest transformation.
+ * jest.mock() with __esModule:true correctly intercepts before any module loads.
  */
 
-import { jest, describe, test, expect, beforeEach } from '@jest/globals';
+import { jest, describe, test, expect, beforeEach, afterAll } from '@jest/globals';
 
-// jest.mock is hoisted by babel-jest — all factories must be self-contained
-jest.mock('../../src/utils/logger.js', () => {
-    const noop = () => {};
-    return { __esModule: true, default: { info: noop, warn: noop, error: noop, debug: noop } };
-});
+// jest.mock is hoisted by babel-jest — all factories must be self-contained (no external vars)
+jest.mock('../../src/utils/logger.js', () => ({
+    __esModule: true,
+    default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+}));
 
 jest.mock('../../src/services/ui-manager.js', () => ({
     __esModule: true,
-    broadcastEvent: (...args) => {},
+    broadcastEvent: () => {},
 }));
 
 jest.mock('../../src/services/service-manager.js', () => ({
@@ -129,7 +134,6 @@ describe('refreshCursorToken', () => {
         expect(result.access_token).toBe(fakeJwt);
         expect(result.refresh_token).toBe('new-rt');
         expect(typeof result.expires_at).toBe('number');
-        // expires_at = exp * 1000 - 5min safety margin
         expect(result.expires_at).toBe(futureExp * 1000 - 5 * 60 * 1000);
     });
 
@@ -190,7 +194,6 @@ describe('handleCursorOAuth', () => {
     });
 
     test('returns authUrl and authInfo', async () => {
-        // Polling will get 404 (not-yet-authorized) then stop
         global.fetch.mockResolvedValue({ status: 404 });
 
         const result = await handleCursorOAuth({});
@@ -207,7 +210,6 @@ describe('handleCursorOAuth', () => {
         const result = await handleCursorOAuth({});
         expect(result.authUrl).toBeDefined();
 
-        // Allow background polling to fire
         await new Promise((r) => setTimeout(r, 200));
     });
 });

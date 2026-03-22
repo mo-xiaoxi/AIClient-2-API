@@ -3,19 +3,22 @@
  *
  * Tests: CursorTokenStore — initialization, token caching, expiry detection,
  *        concurrent refresh deduplication, refresh failure handling.
+ *
+ * NOTE: Must use jest.mock() (hoisted by babel-jest) instead of jest.unstable_mockModule()
+ * because this project's transitive import chain uses import.meta.url which fails under
+ * babel-jest. Variables referenced in jest.mock factories must be prefixed with "mock".
  */
 
-import { jest, describe, test, expect, beforeEach, afterAll } from '@jest/globals';
+import { jest, describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { promises as fs } from 'node:fs';
 
 // jest.mock is hoisted by babel-jest — all factories must be self-contained
-jest.mock('../../src/utils/logger.js', () => {
-    const noop = () => {};
-    return { __esModule: true, default: { info: noop, warn: noop, error: noop, debug: noop } };
-});
+jest.mock('../../src/utils/logger.js', () => ({
+    __esModule: true,
+    default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+}));
 
-// Mock cursor-oauth — the factory must be self-contained (no external vars)
-// We get a reference to the mock after import via jest.mocked
+// Variable name MUST start with "mock" for jest.mock hoisting to allow external reference
 let mockRefreshFn;
 jest.mock('../../src/auth/cursor-oauth.js', () => ({
     __esModule: true,
@@ -61,7 +64,6 @@ describe('CursorTokenStore', () => {
     beforeEach(() => {
         mockRefreshFn = jest.fn();
         store = new CursorTokenStore('/tmp/test-cursor-tokens.json');
-        // Set up fs spies
         readFileSpy = jest.spyOn(fs, 'readFile');
         writeFileSpy = jest.spyOn(fs, 'writeFile');
         unlinkSpy = jest.spyOn(fs, 'unlink');
@@ -167,11 +169,9 @@ describe('CursorTokenStore', () => {
             mockRefreshFn.mockImplementation(() => new Promise((r) => { resolveRefresh = r; }));
             writeFileSpy.mockResolvedValue();
 
-            // Start two concurrent calls
             const p1 = store.getValidAccessToken();
             const p2 = store.getValidAccessToken();
 
-            // Wait a tick for both to enter the refresh path
             await new Promise((r) => setTimeout(r, 10));
             resolveRefresh(newTokens);
 

@@ -4,14 +4,17 @@
  * Tests: deriveSessionKey, saveSession, getSession, removeSession,
  *        cleanupSession, removeAndCleanupSession, cleanupAllSessions,
  *        getActiveSessionCount, session expiry.
+ *
+ * NOTE: Must use jest.mock() (hoisted by babel-jest) instead of jest.unstable_mockModule()
+ * because this project's import chain uses import.meta.url which fails under babel-jest.
  */
 
 import { jest, describe, test, expect, afterEach } from '@jest/globals';
 
-jest.mock('../../src/utils/logger.js', () => {
-    const noop = () => {};
-    return { __esModule: true, default: { info: noop, warn: noop, error: noop, debug: noop } };
-});
+jest.mock('../../src/utils/logger.js', () => ({
+    __esModule: true,
+    default: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+}));
 
 import {
     deriveSessionKey,
