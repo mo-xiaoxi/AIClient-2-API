@@ -29,6 +29,5 @@ export default {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/tests/live/',
-    '/\\.claude/worktrees/',
   ],
 };

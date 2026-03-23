@@ -1,17 +1,16 @@
 /**
  * Unit tests for cursor-protobuf.js
  *
- * Tests: parseMessages, frameConnectMessage, parseConnectFrame,
- *        buildCursorAgentRequest, buildHeartbeatBytes, buildMcpToolDefinitions,
- *        buildToolResultFrames
+ * Tests: parseMessages, buildCursorAgentRequest, buildHeartbeatBytes,
+ *        buildMcpToolDefinitions, buildToolResultFrames
+ *
+ * Note: frameConnectMessage, parseConnectFrame, CONNECT_END_STREAM_FLAG
+ *       are defined in cursor-h2.js and tested in cursor-h2.test.js.
  */
 
 import { describe, test, expect } from '@jest/globals';
 import {
     parseMessages,
-    frameConnectMessage,
-    parseConnectFrame,
-    CONNECT_END_STREAM_FLAG,
     buildCursorAgentRequest,
     buildHeartbeatBytes,
     buildMcpToolDefinitions,
@@ -163,71 +162,6 @@ describe('parseMessages', () => {
         // Last pair has no trailing user, so last turn is popped
         expect(result.userText).toBe('Q2');
         expect(result.turns).toHaveLength(1);
-    });
-});
-
-// ============================================================================
-// frameConnectMessage / parseConnectFrame
-// ============================================================================
-
-describe('frameConnectMessage', () => {
-    test('creates a 5-byte header + data frame', () => {
-        const data = Buffer.from('hello');
-        const frame = frameConnectMessage(data);
-        expect(frame.length).toBe(5 + 5);
-        expect(frame[0]).toBe(0); // flags = 0
-        expect(frame.readUInt32BE(1)).toBe(5); // data length
-        expect(frame.subarray(5).toString()).toBe('hello');
-    });
-
-    test('sets custom flags', () => {
-        const data = Buffer.from('x');
-        const frame = frameConnectMessage(data, CONNECT_END_STREAM_FLAG);
-        expect(frame[0]).toBe(0x02);
-    });
-
-    test('handles empty data', () => {
-        const frame = frameConnectMessage(Buffer.alloc(0));
-        expect(frame.length).toBe(5);
-        expect(frame.readUInt32BE(1)).toBe(0);
-    });
-
-    test('handles Uint8Array input', () => {
-        const data = new Uint8Array([1, 2, 3]);
-        const frame = frameConnectMessage(data);
-        expect(frame.length).toBe(8);
-        expect(frame.readUInt32BE(1)).toBe(3);
-    });
-});
-
-describe('parseConnectFrame', () => {
-    test('returns Error for Connect error response', () => {
-        const errorPayload = JSON.stringify({
-            error: { code: 'permission_denied', message: 'Access denied' },
-        });
-        const err = parseConnectFrame(Buffer.from(errorPayload));
-        expect(err).toBeInstanceOf(Error);
-        expect(err.message).toContain('permission_denied');
-        expect(err.message).toContain('Access denied');
-    });
-
-    test('returns null for successful end stream (no error)', () => {
-        const payload = JSON.stringify({});
-        const result = parseConnectFrame(Buffer.from(payload));
-        expect(result).toBeNull();
-    });
-
-    test('returns Error for invalid JSON', () => {
-        const err = parseConnectFrame(Buffer.from('not json'));
-        expect(err).toBeInstanceOf(Error);
-        expect(err.message).toContain('Failed to parse');
-    });
-
-    test('handles error with missing code/message', () => {
-        const payload = JSON.stringify({ error: {} });
-        const err = parseConnectFrame(Buffer.from(payload));
-        expect(err).toBeInstanceOf(Error);
-        expect(err.message).toContain('unknown');
     });
 });
 

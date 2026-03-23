@@ -110,18 +110,20 @@ beforeAll(async () => {
         cleanupSession: jest.fn(),
     }));
 
-    // H2
+    // H2 — includes Connect Protocol constants now imported from cursor-h2.js
     await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-h2.js', () => ({
+        CONNECT_END_STREAM_FLAG,
+        frameConnectMessage: jest.fn(() => Buffer.from('framed')),
+        parseConnectFrame: jest.fn(() => null),
         h2RequestStream: jest.fn(() => ({
             client: createMockH2Client(),
             stream: mockH2Stream,
         })),
     }));
 
-    // Protobuf helpers — keep CONNECT_END_STREAM_FLAG, mock the rest
+    // Protobuf helpers
     mockProcessAgentServerMessage = jest.fn();
     await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-protobuf.js', () => ({
-        CONNECT_END_STREAM_FLAG,
         parseMessages: jest.fn(() => ({
             systemPrompt: 'You are a helpful assistant.',
             userText: 'Hello',
@@ -135,8 +137,6 @@ beforeAll(async () => {
         })),
         buildHeartbeatBytes: jest.fn(() => Buffer.from('heartbeat')),
         buildMcpToolDefinitions: jest.fn(() => []),
-        frameConnectMessage: jest.fn(() => Buffer.from('framed')),
-        parseConnectFrame: jest.fn(() => null),
         processAgentServerMessage: mockProcessAgentServerMessage,
         buildToolResultFrames: jest.fn(() => []),
     }));
@@ -247,7 +247,7 @@ describe('CursorApiService — end-stream error handling', () => {
             expect(result.object).toBe('chat.completion');
         });
 
-        test('should return empty content when end-stream has non-JSON payload', async () => {
+        test('should return null content when end-stream has non-JSON payload and no text', async () => {
             const requestBody = {
                 messages: [{ role: 'user', content: 'Hello' }],
             };
@@ -260,7 +260,8 @@ describe('CursorApiService — end-stream error handling', () => {
             });
 
             const result = await promise;
-            expect(result.choices[0].message.content).toBe('');
+            // No text was collected, so content is null (empty string is falsy)
+            expect(result.choices[0].message.content).toBeNull();
         });
 
         test('should parse error with fallback to error.message when details missing', async () => {

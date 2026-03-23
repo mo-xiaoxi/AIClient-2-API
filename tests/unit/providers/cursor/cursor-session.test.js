@@ -88,7 +88,7 @@ describe('deriveSessionKey', () => {
         expect(k1).not.toBe(k2);
     });
 
-    test('uses first user message only', () => {
+    test('differs for different message counts (same first user message)', () => {
         const k1 = deriveSessionKey('model', [
             { role: 'user', content: 'First' },
             { role: 'assistant', content: 'Reply' },
@@ -97,14 +97,15 @@ describe('deriveSessionKey', () => {
         const k2 = deriveSessionKey('model', [
             { role: 'user', content: 'First' },
         ]);
-        expect(k1).toBe(k2);
+        expect(k1).not.toBe(k2);
     });
 
-    test('truncates user message to 200 chars', () => {
+    test('truncates first user message to 200 chars', () => {
         const longMsg = 'A'.repeat(300);
         const shortMsg = 'A'.repeat(200);
         const k1 = deriveSessionKey('model', [{ role: 'user', content: longMsg }]);
         const k2 = deriveSessionKey('model', [{ role: 'user', content: shortMsg }]);
+        // Both have msgCount=1, same first 200 chars, and lastContent truncated to 100 chars (both "AAA...")
         expect(k1).toBe(k2);
     });
 
