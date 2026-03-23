@@ -245,7 +245,7 @@ describe('provider-api.js - handleAddProvider', () => {
         writeFileSync.mockImplementation(() => {});
         getRequestBody.mockResolvedValue({
             providerType: 'openai-custom',
-            providerConfig: { apiKey: 'sk-test' },
+            providerConfig: { apiKey: 'test-api-key-placeholder' },
         });
 
         const req = {};

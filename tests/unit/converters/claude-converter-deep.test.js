@@ -42,6 +42,7 @@ describe('ClaudeConverter - Claude -> OpenAI Request', () => {
         expect(result.messages.length).toBeGreaterThan(0);
         const userMsg = result.messages.find(m => m.role === 'user');
         expect(userMsg).toBeDefined();
+        expect(JSON.stringify(userMsg.content)).toContain('Hello world');
     });
 
     test('extracts system prompt into OpenAI system message', async () => {

@@ -3,11 +3,34 @@
  * model lists, stream chunks, and edge cases beyond the existing 2 tests.
  */
 
-import { describe, test, expect } from '@jest/globals';
-import { OpenAIConverter } from '../../../src/converters/strategies/OpenAIConverter.js';
-import { MODEL_PROTOCOL_PREFIX } from '../../../src/utils/common.js';
+import { describe, test, expect, jest, beforeAll, beforeEach } from '@jest/globals';
 
-const converter = new OpenAIConverter();
+jest.unstable_mockModule('../../../src/utils/tls-sidecar.js', () => ({
+    default: {},
+    initTlsSidecar: jest.fn(),
+}));
+
+jest.unstable_mockModule('../../../src/utils/logger.js', () => ({
+    default: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+    },
+}));
+
+let OpenAIConverter;
+let MODEL_PROTOCOL_PREFIX;
+let converter;
+
+beforeAll(async () => {
+    ({ OpenAIConverter } = await import('../../../src/converters/strategies/OpenAIConverter.js'));
+    ({ MODEL_PROTOCOL_PREFIX } = await import('../../../src/utils/common.js'));
+});
+
+beforeEach(() => {
+    converter = new OpenAIConverter();
+});
 
 // ============================================================================
 // convertRequest routing

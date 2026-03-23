@@ -7,7 +7,11 @@
  * ESM: jest.unstable_mockModule + dynamic import.
  */
 
-import { jest, describe, test, expect, beforeAll, beforeEach, afterEach } from '@jest/globals';
+import { jest, describe, test, expect, beforeAll, beforeEach, afterEach, afterAll } from '@jest/globals';
+
+// Save original console methods to restore after tests
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -31,6 +35,11 @@ beforeAll(async () => {
         multerFn.diskStorage = jest.fn(() => ({}));
         return { default: multerFn };
     });
+
+    const mod = await import('../../../src/ui-modules/event-broadcast.js');
+    broadcastEvent = mod.broadcastEvent;
+    handleEvents = mod.handleEvents;
+    initializeUIManagement = mod.initializeUIManagement;
 });
 
 // ---------------------------------------------------------------------------
@@ -40,13 +49,6 @@ let broadcastEvent;
 let handleEvents;
 let initializeUIManagement;
 
-beforeAll(async () => {
-    const mod = await import('../../../src/ui-modules/event-broadcast.js');
-    broadcastEvent = mod.broadcastEvent;
-    handleEvents = mod.handleEvents;
-    initializeUIManagement = mod.initializeUIManagement;
-});
-
 beforeEach(() => {
     // Reset global event client state between tests
     global.eventClients = [];
@@ -55,9 +57,20 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    // Clear all pending timers to prevent leaks from handleEvents keepalive intervals
+    jest.clearAllTimers();
     jest.useRealTimers();
+    // Restore console methods that initializeUIManagement may have overridden
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
     global.eventClients = [];
     global.logBuffer = [];
+});
+
+afterAll(() => {
+    // Final safety restore
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
 });
 
 // ---------------------------------------------------------------------------

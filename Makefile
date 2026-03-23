@@ -58,17 +58,8 @@ test-coverage: ## 单元测试 + 覆盖率报告
 # --------------------------------------------------------------------------
 # 测试 — 组合
 # --------------------------------------------------------------------------
-test-all: ## 运行全部测试（unit + integration + e2e）
-	@echo "========== Unit Tests =========="
-	pnpm test
-	@echo ""
-	@echo "========== Integration Tests =========="
-	pnpm run test:integration
-	@echo ""
-	@echo "========== E2E API Tests =========="
-	pnpm run test:e2e
-	@echo ""
-	@echo "========== All tests passed =========="
+test-all: ## 运行全部测试（unit + integration，与 pnpm test:all 一致）
+	pnpm run test:all
 
 # --------------------------------------------------------------------------
 # 本地 CI — 模拟 GitHub Actions 流水线

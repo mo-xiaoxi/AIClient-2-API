@@ -125,25 +125,27 @@ describe('convertData', () => {
         messages: [{ role: 'user', content: 'Hello' }],
     };
 
-    test('openai->claude request conversion returns object', () => {
+    test('openai->claude request conversion produces claude-shaped output', () => {
         const result = convert.convertData(
             simpleOpenAIRequest,
             'request',
             'openai-custom',
             'claude-custom'
         );
-        expect(result).toBeDefined();
-        expect(typeof result).toBe('object');
+        expect(result).toHaveProperty('messages');
+        expect(result).toHaveProperty('max_tokens');
+        expect(result.messages[0].role).toBe('user');
     });
 
-    test('openai->gemini request conversion returns object', () => {
+    test('openai->gemini request conversion produces gemini-shaped output', () => {
         const result = convert.convertData(
             simpleOpenAIRequest,
             'request',
             'openai-custom',
             'gemini-cli-oauth'
         );
-        expect(result).toBeDefined();
+        expect(result).toHaveProperty('contents');
+        expect(Array.isArray(result.contents)).toBe(true);
     });
 
     test('forward protocol passthrough returns original data unchanged', () => {
@@ -168,7 +170,7 @@ describe('convertData', () => {
         ).toThrow('Unsupported conversion type');
     });
 
-    test('claude->openai response conversion returns object', () => {
+    test('claude->openai response conversion produces openai-shaped output', () => {
         const claudeResponse = {
             id: 'msg_01',
             type: 'message',
@@ -185,10 +187,11 @@ describe('convertData', () => {
             'openai-custom',
             'claude-3-5-sonnet'
         );
-        expect(result).toBeDefined();
+        expect(result).toHaveProperty('choices');
+        expect(result.choices[0].message.content).toContain('Hello world');
     });
 
-    test('gemini->openai streamChunk conversion returns object', () => {
+    test('gemini->openai streamChunk conversion produces chunk output', () => {
         const geminiChunk = {
             candidates: [{
                 content: { parts: [{ text: 'chunk text' }], role: 'model' },
@@ -202,11 +205,11 @@ describe('convertData', () => {
             'openai-custom',
             'gemini-2.0-flash'
         );
-        expect(result).toBeDefined();
+        expect(result).toHaveProperty('choices');
+        expect(result.choices[0].delta.content).toContain('chunk text');
     });
 
-    test('modelList conversion returns object', () => {
-        // Claude model list has a `models` array
+    test('modelList conversion produces openai model list', () => {
         const claudeModels = { models: [{ id: 'claude-3-5-sonnet' }] };
         const result = convert.convertData(
             claudeModels,
@@ -214,7 +217,9 @@ describe('convertData', () => {
             'claude-custom',
             'openai-custom'
         );
-        expect(result).toBeDefined();
+        expect(result).toHaveProperty('data');
+        expect(Array.isArray(result.data)).toBe(true);
+        expect(result.data.length).toBeGreaterThan(0);
     });
 });
 
@@ -328,18 +333,21 @@ describe('getOpenAIStreamChunkStop', () => {
 // getOpenAIResponsesStreamChunkBegin / End
 // ---------------------------------------------------------------------------
 describe('getOpenAIResponsesStreamChunkBegin', () => {
-    test('returns array of 4 begin events', () => {
+    test('returns array of 4 begin events with correct types', () => {
         const events = convert.getOpenAIResponsesStreamChunkBegin('resp-id', 'gpt-4');
         expect(Array.isArray(events)).toBe(true);
         expect(events).toHaveLength(4);
+        // Verify each event has the id passed through
+        events.forEach(e => expect(e).toHaveProperty('id', 'resp-id'));
     });
 });
 
 describe('getOpenAIResponsesStreamChunkEnd', () => {
-    test('returns array of 4 end events', () => {
+    test('returns array of 4 end events with correct types', () => {
         const events = convert.getOpenAIResponsesStreamChunkEnd('resp-id');
         expect(Array.isArray(events)).toBe(true);
         expect(events).toHaveLength(4);
+        events.forEach(e => expect(e).toHaveProperty('id', 'resp-id'));
     });
 });
 

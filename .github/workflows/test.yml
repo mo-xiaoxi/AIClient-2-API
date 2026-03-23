@@ -17,6 +17,7 @@ jobs:
   unit:
     name: Unit Tests (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +45,7 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -67,6 +69,7 @@ jobs:
   e2e:
     name: E2E API Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -83,3 +86,22 @@ jobs:
 
       - name: Run E2E tests
         run: pnpm run test:e2e
+
+  # ------------------------------------------------------------------
+  # 4. CI Gate — 所有 job 通过后的汇总状态
+  # ------------------------------------------------------------------
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [unit, integration, e2e]
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.unit.result }}" != "success" ]] || \
+             [[ "${{ needs.integration.result }}" != "success" ]] || \
+             [[ "${{ needs.e2e.result }}" != "success" ]]; then
+            echo "One or more CI jobs failed"
+            exit 1
+          fi
+          echo "All CI jobs passed"

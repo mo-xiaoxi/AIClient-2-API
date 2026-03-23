@@ -10,6 +10,15 @@ jest.unstable_mockModule('../../../src/utils/tls-sidecar.js', () => ({
     initTlsSidecar: jest.fn(),
 }));
 
+jest.unstable_mockModule('../../../src/utils/logger.js', () => ({
+    default: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+    },
+}));
+
 let GeminiConverter;
 let MODEL_PROTOCOL_PREFIX;
 
@@ -30,6 +39,7 @@ describe('GeminiConverter - Gemini -> OpenAI Request', () => {
         expect(Array.isArray(result.messages)).toBe(true);
         const userMsg = result.messages.find(m => m.role === 'user');
         expect(userMsg).toBeDefined();
+        expect(userMsg.content).toContain('Hello world');
     });
 
     test('converts Gemini systemInstruction to OpenAI system message', async () => {

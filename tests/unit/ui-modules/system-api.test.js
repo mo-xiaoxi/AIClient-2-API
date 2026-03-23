@@ -2,7 +2,7 @@
  * UI Module: system-api.js Tests
  */
 
-import { jest, describe, test, expect, beforeAll } from '@jest/globals';
+import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
 
 jest.unstable_mockModule('../../../src/utils/tls-sidecar.js', () => ({
     default: {},
@@ -38,6 +38,10 @@ jest.unstable_mockModule('fs', () => {
             pipe: jest.fn(),
         })),
     };
+});
+
+beforeEach(() => {
+    jest.clearAllMocks();
 });
 
 function createMockRes() {

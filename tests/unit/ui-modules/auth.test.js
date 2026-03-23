@@ -4,6 +4,9 @@
 
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
 
+// Must match DEFAULT_PASSWORD in src/ui-modules/auth.js
+const DEFAULT_PASSWORD = 'admin123';
+
 jest.unstable_mockModule('../../../src/utils/tls-sidecar.js', () => ({
     default: {},
     initTlsSidecar: jest.fn(),
@@ -18,15 +21,17 @@ jest.unstable_mockModule('../../../src/utils/logger.js', () => ({
     },
 }));
 
-// Mock fs to avoid actual file reads
+// Mock fs — default: file not found; override per-test as needed
+const mockReadFile = jest.fn().mockRejectedValue({ code: 'ENOENT' });
+const mockWriteFile = jest.fn().mockResolvedValue(undefined);
 jest.unstable_mockModule('fs', () => {
     const actual = jest.requireActual('fs');
     return {
         ...actual,
         existsSync: jest.fn(() => false),
         promises: {
-            readFile: jest.fn().mockRejectedValue({ code: 'ENOENT' }),
-            writeFile: jest.fn().mockResolvedValue(undefined),
+            readFile: mockReadFile,
+            writeFile: mockWriteFile,
         },
     };
 });
@@ -93,13 +98,19 @@ beforeAll(async () => {
 describe('auth.js - readPasswordFile', () => {
     test('returns default password when file does not exist', async () => {
         const password = await readPasswordFile();
-        expect(password).toBe('admin123');
+        expect(password).toBe(DEFAULT_PASSWORD);
+    });
+
+    test('returns custom password when file exists', async () => {
+        mockReadFile.mockResolvedValueOnce('my-custom-password\n');
+        const password = await readPasswordFile();
+        expect(password).toBe('my-custom-password');
     });
 });
 
 describe('auth.js - validateCredentials', () => {
     test('validates correct default password', async () => {
-        const isValid = await validateCredentials('admin123');
+        const isValid = await validateCredentials(DEFAULT_PASSWORD);
         expect(isValid).toBe(true);
     });
 
@@ -134,7 +145,7 @@ describe('auth.js - handleLoginRequest', () => {
     });
 
     test('returns 200 with token on correct password', async () => {
-        const req = createMockReq('POST', { password: 'admin123' });
+        const req = createMockReq('POST', { password: DEFAULT_PASSWORD });
         const res = createMockRes();
         await handleLoginRequest(req, res);
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
