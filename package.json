@@ -44,5 +44,6 @@
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand tests/e2e/api --forceExit",
     "test:ui": "playwright test",
     "test:ui:install": "playwright install chromium"
-  }
+  },
+  "version": "1.0.0"
 }
