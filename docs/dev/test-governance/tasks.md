@@ -24,9 +24,9 @@ NODE_OPTIONS=--experimental-vm-modules npx jest tests/unit --coverage --forceExi
 - 被测模块通过 `const mod = await import(...)` 动态导入
 - 参考 `tests/unit/auth/codex-oauth.test.js` 的模式
 
-### 当前状态（2026-03-23）
-- **1718 通过 / 15 失败**（2 个套件：api-server, api-potluck-routes）
-- 整体覆盖率约 **~45%**（目标 70%）
+### 当前状态（2026-03-24）
+- **Phase 1（T01–T03）已完成**：`api-server.test.js`、`api-potluck-routes.test.js` 已修复；`pnpm test`（tests/unit）**1725 通过 / 0 失败**
+- 整体覆盖率仍低于 70%，后续按 T04+ 继续补测；**T11 覆盖率阈值**须在达标后再开
 
 ---
 

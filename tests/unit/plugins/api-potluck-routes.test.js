@@ -64,6 +64,16 @@ function parseSentJson(res) {
     return JSON.parse(raw);
 }
 
+/**
+ * 先启动路由（注册 parseRequestBody 的 data/end 监听），再在 setImmediate 中推送 body，
+ * 避免在监听注册前调用 _end() 导致 Promise 永不结束。
+ */
+async function invokePotluckWithBody(method, path, req, res) {
+    const p = handlePotluckApiRoutes(method, path, req, res);
+    setImmediate(() => req._end());
+    return p;
+}
+
 // Build a minimal token store file content for admin auth
 const VALID_ADMIN_TOKEN = 'admin-token-xyz';
 const TOKEN_STORE_CONTENT = JSON.stringify({
@@ -223,9 +233,8 @@ describe('handlePotluckApiRoutes() - POST /api/potluck/keys', () => {
         const keyData = { id: VALID_KEY, name: 'new-key' };
         mockCreateKey.mockResolvedValue(keyData);
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { name: 'new-key', dailyLimit: 100 });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('POST', '/api/potluck/keys', req, res);
+        await invokePotluckWithBody('POST', '/api/potluck/keys', req, res);
         expect(res.writeHead).toHaveBeenCalledWith(201, expect.any(Object));
         const body = parseSentJson(res);
         expect(body.success).toBe(true);
@@ -240,26 +249,23 @@ describe('handlePotluckApiRoutes() - POST /api/potluck/keys', () => {
 describe('handlePotluckApiRoutes() - POST /api/potluck/keys/apply-limit', () => {
     test('returns 400 when dailyLimit is missing', async () => {
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, {});
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('POST', '/api/potluck/keys/apply-limit', req, res);
+        await invokePotluckWithBody('POST', '/api/potluck/keys/apply-limit', req, res);
         expect(res.writeHead).toHaveBeenCalledWith(400, expect.any(Object));
     });
 
     test('returns 400 when dailyLimit is zero or negative', async () => {
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { dailyLimit: 0 });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('POST', '/api/potluck/keys/apply-limit', req, res);
+        await invokePotluckWithBody('POST', '/api/potluck/keys/apply-limit', req, res);
         expect(res.writeHead).toHaveBeenCalledWith(400, expect.any(Object));
     });
 
     test('applies limit and returns 200 when dailyLimit is valid', async () => {
         mockApplyDailyLimitToAllKeys.mockResolvedValue({ total: 3, updated: 3 });
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { dailyLimit: 100 });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('POST', '/api/potluck/keys/apply-limit', req, res);
+        await invokePotluckWithBody('POST', '/api/potluck/keys/apply-limit', req, res);
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
         const body = parseSentJson(res);
         expect(body.success).toBe(true);
@@ -323,27 +329,24 @@ describe('handlePotluckApiRoutes() - DELETE /api/potluck/keys/:keyId', () => {
 describe('handlePotluckApiRoutes() - PUT /api/potluck/keys/:keyId/limit', () => {
     test('returns 400 for invalid dailyLimit', async () => {
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { dailyLimit: -1 });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('PUT', `/api/potluck/keys/${VALID_KEY}/limit`, req, res);
+        await invokePotluckWithBody('PUT', `/api/potluck/keys/${VALID_KEY}/limit`, req, res);
         expect(res.writeHead).toHaveBeenCalledWith(400, expect.any(Object));
     });
 
     test('returns 404 when key not found', async () => {
         mockUpdateKeyLimit.mockResolvedValue(null);
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { dailyLimit: 100 });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('PUT', `/api/potluck/keys/${VALID_KEY}/limit`, req, res);
+        await invokePotluckWithBody('PUT', `/api/potluck/keys/${VALID_KEY}/limit`, req, res);
         expect(res.writeHead).toHaveBeenCalledWith(404, expect.any(Object));
     });
 
     test('returns 200 on success', async () => {
         mockUpdateKeyLimit.mockResolvedValue({ id: VALID_KEY, dailyLimit: 100 });
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { dailyLimit: 100 });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('PUT', `/api/potluck/keys/${VALID_KEY}/limit`, req, res);
+        await invokePotluckWithBody('PUT', `/api/potluck/keys/${VALID_KEY}/limit`, req, res);
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     });
 });
@@ -401,27 +404,24 @@ describe('handlePotluckApiRoutes() - POST /api/potluck/keys/:keyId/toggle', () =
 describe('handlePotluckApiRoutes() - PUT /api/potluck/keys/:keyId/name', () => {
     test('returns 400 when name is missing or empty', async () => {
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { name: '' });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('PUT', `/api/potluck/keys/${VALID_KEY}/name`, req, res);
+        await invokePotluckWithBody('PUT', `/api/potluck/keys/${VALID_KEY}/name`, req, res);
         expect(res.writeHead).toHaveBeenCalledWith(400, expect.any(Object));
     });
 
     test('returns 404 when key not found', async () => {
         mockUpdateKeyName.mockResolvedValue(null);
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { name: 'new-name' });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('PUT', `/api/potluck/keys/${VALID_KEY}/name`, req, res);
+        await invokePotluckWithBody('PUT', `/api/potluck/keys/${VALID_KEY}/name`, req, res);
         expect(res.writeHead).toHaveBeenCalledWith(404, expect.any(Object));
     });
 
     test('returns 200 on success', async () => {
         mockUpdateKeyName.mockResolvedValue({ id: VALID_KEY, name: 'new-name' });
         const req = makeBodyReq({ authorization: `Bearer ${VALID_ADMIN_TOKEN}` }, { name: 'new-name' });
-        req._end();
         const res = makeRes();
-        await handlePotluckApiRoutes('PUT', `/api/potluck/keys/${VALID_KEY}/name`, req, res);
+        await invokePotluckWithBody('PUT', `/api/potluck/keys/${VALID_KEY}/name`, req, res);
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     });
 });

@@ -202,6 +202,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    jest.useRealTimers();
     delete process.env.AICLIENT_TEST_SERVER;
     delete process.env.IS_WORKER_PROCESS;
 });
@@ -218,10 +219,7 @@ describe('startServer()', () => {
 
     test('uses default argv and configPath when options not provided', async () => {
         await startServer({});
-        expect(mockInitializeConfig).toHaveBeenCalledWith(
-            expect.any(Array),
-            'configs/config.json'
-        );
+        expect(mockInitializeConfig).toHaveBeenCalledWith(process.argv.slice(2), 'configs/config.json');
     });
 
     test('discovers and initializes plugins', async () => {
@@ -310,21 +308,19 @@ describe('startServer()', () => {
     });
 
     test('sets up cron interval when CRON_REFRESH_TOKEN is true', async () => {
-        jest.useFakeTimers();
         const heartbeatFn = jest.fn().mockResolvedValue(undefined);
         mockInitializeAPIManagement.mockReturnValue(heartbeatFn);
         mockConfig.CRON_REFRESH_TOKEN = true;
         mockConfig.CRON_NEAR_MINUTES = 15;
 
-        await startServer({});
-        // Advance timers to trigger the interval
-        jest.advanceTimersByTime(15 * 60 * 1000 + 100);
-        // heartbeat may be called asynchronously
-        expect(typeof heartbeatFn).toBe('function');
+        const setIntervalSpy = jest.spyOn(global, 'setInterval').mockReturnValue(1);
 
-        // Restore
+        await startServer({ argv: [] });
+
+        expect(setIntervalSpy).toHaveBeenCalledWith(heartbeatFn, 15 * 60 * 1000);
+
+        setIntervalSpy.mockRestore();
         mockConfig.CRON_REFRESH_TOKEN = false;
-        jest.useRealTimers();
     });
 });
 
