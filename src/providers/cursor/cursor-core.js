@@ -16,13 +16,15 @@ import {
     buildHeartbeatBytes,
     buildMcpToolDefinitions,
     buildToolResultFrames,
-    CONNECT_END_STREAM_FLAG,
-    frameConnectMessage,
-    parseConnectFrame,
     parseMessages,
     processAgentServerMessage,
 } from './cursor-protobuf.js';
-import { h2RequestStream } from './cursor-h2.js';
+import {
+    CONNECT_END_STREAM_FLAG,
+    frameConnectMessage,
+    parseConnectFrame,
+    h2RequestStream,
+} from './cursor-h2.js';
 import {
     deriveSessionKey,
     getSession,
@@ -106,7 +108,15 @@ export class CursorApiService {
             const session = getSession(sessionKey);
             if (session) {
                 removeSession(sessionKey);
-                return this._resumeNonStreaming(session, toolResults, model, sessionKey);
+                const { h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, pendingExecs } = session;
+                const frames = buildToolResultFrames(pendingExecs, toolResults);
+                for (const frame of frames) {
+                    if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(frame);
+                }
+                h2Stream.removeAllListeners('data');
+                h2Stream.removeAllListeners('end');
+                h2Stream.removeAllListeners('error');
+                return this._collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
             }
         }
 
@@ -120,7 +130,16 @@ export class CursorApiService {
             mcpTools,
         });
 
-        return this._doH2RequestNonStreaming({ accessToken, requestBytes, blobStore, mcpTools, model });
+        const { client: h2Client, stream: h2Stream } = h2RequestStream({ accessToken });
+        h2Stream.write(frameConnectMessage(requestBytes));
+
+        const heartbeatTimer = setInterval(() => {
+            if (!h2Stream.closed && !h2Stream.destroyed) {
+                h2Stream.write(buildHeartbeatBytes());
+            }
+        }, 5_000);
+
+        return this._collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
     }
 
     /**
@@ -144,7 +163,15 @@ export class CursorApiService {
             const session = getSession(sessionKey);
             if (session) {
                 removeSession(sessionKey);
-                yield* this._resumeStreaming(session, toolResults, model, sessionKey);
+                const { h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, pendingExecs } = session;
+                const frames = buildToolResultFrames(pendingExecs, toolResults);
+                for (const frame of frames) {
+                    if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(frame);
+                }
+                h2Stream.removeAllListeners('data');
+                h2Stream.removeAllListeners('end');
+                h2Stream.removeAllListeners('error');
+                yield* this._streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
                 return;
             }
         }
@@ -159,7 +186,16 @@ export class CursorApiService {
             mcpTools,
         });
 
-        yield* this._doH2RequestStreaming({ accessToken, requestBytes, blobStore, mcpTools, model, sessionKey });
+        const { client: h2Client, stream: h2Stream } = h2RequestStream({ accessToken });
+        h2Stream.write(frameConnectMessage(requestBytes));
+
+        const heartbeatTimer = setInterval(() => {
+            if (!h2Stream.closed && !h2Stream.destroyed) {
+                h2Stream.write(buildHeartbeatBytes());
+            }
+        }, 5_000);
+
+        yield* this._streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
     }
 
     /**
@@ -237,34 +273,46 @@ export class CursorApiService {
         return {};
     }
 
-    // ---------- Internal helpers ----------
-
-    async _ensureInitialized() {
-        if (!this.isInitialized) await this.initialize();
-    }
+    // ---------- Internal: shared H2 consumers ----------
 
     /**
-     * Non-streaming HTTP/2 request.
+     * Non-streaming H2 consumer. Collects text from the stream and returns
+     * an OpenAI Chat Completion response. Supports tool_calls and thinking.
+     *
+     * Used by both initial requests and session resumption.
      */
-    async _doH2RequestNonStreaming({ accessToken, requestBytes, blobStore, mcpTools, model }) {
+    _collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey }) {
         const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 28)}`;
         const created = Math.floor(Date.now() / 1000);
 
-        const { client: h2Client, stream: h2Stream } = h2RequestStream({ accessToken });
-        h2Stream.write(frameConnectMessage(requestBytes));
-
-        const heartbeatTimer = setInterval(() => {
-            if (!h2Stream.closed && !h2Stream.destroyed) {
-                h2Stream.write(buildHeartbeatBytes());
-            }
-        }, 5_000);
-
         let fullText = '';
+        let thinkingText = '';
         let pendingBuffer = Buffer.alloc(0);
-        const state = { thinkingActive: false };
+        const toolCalls = [];
+        const pendingExecs = [];
+        let resolved = false;
+
+        const buildResponse = (finishReason = 'stop') => {
+            const content = thinkingText
+                ? `<think>${thinkingText}</think>${fullText}`
+                : fullText;
+            const message = { role: 'assistant', content: content || null };
+            if (toolCalls.length > 0) {
+                message.tool_calls = toolCalls;
+            }
+            return {
+                id,
+                object: 'chat.completion',
+                created,
+                model,
+                choices: [{ index: 0, message, finish_reason: finishReason }],
+                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+            };
+        };
 
         return new Promise((resolve, reject) => {
             h2Stream.on('data', (incoming) => {
+                if (resolved) return;
                 pendingBuffer = Buffer.concat([pendingBuffer, incoming]);
                 while (pendingBuffer.length >= 5) {
                     const flags = pendingBuffer[0];
@@ -278,6 +326,7 @@ export class CursorApiService {
                             if (endPayload?.error) {
                                 const detail = endPayload.error.details?.[0]?.debug?.details?.detail || endPayload.error.message;
                                 logger.error(`[CursorApiService] Cursor API error: ${detail}`);
+                                resolved = true;
                                 reject(Object.assign(new Error(detail), { status: 400 }));
                                 return;
                             }
@@ -291,8 +340,29 @@ export class CursorApiService {
                             sendFrame: (data) => {
                                 if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(data);
                             },
-                            onText: (text) => { fullText += text; },
-                            onMcpExec: () => {}, // tool_calls silently skipped in non-streaming
+                            onText: (text, isThinking) => {
+                                if (isThinking) {
+                                    thinkingText += text;
+                                } else {
+                                    fullText += text;
+                                }
+                            },
+                            onMcpExec: (exec) => {
+                                pendingExecs.push(exec);
+                                toolCalls.push({
+                                    id: exec.toolCallId,
+                                    type: 'function',
+                                    function: { name: exec.toolName, arguments: exec.decodedArgs },
+                                });
+                                // Save session for caller to resume with tool results
+                                saveSession(sessionKey, {
+                                    h2Client, h2Stream, heartbeatTimer,
+                                    blobStore, mcpTools,
+                                    pendingExecs,
+                                });
+                                resolved = true;
+                                resolve(buildResponse('tool_calls'));
+                            },
                         });
                     } catch (err) {
                         logger.warn(`[CursorApiService] processAgentServerMessage error: ${err.message}`);
@@ -301,38 +371,20 @@ export class CursorApiService {
             });
 
             h2Stream.on('end', () => {
+                if (resolved) return;
                 clearInterval(heartbeatTimer);
                 try { h2Client.close(); } catch {}
-                resolve({
-                    id,
-                    object: 'chat.completion',
-                    created,
-                    model,
-                    choices: [{
-                        index: 0,
-                        message: { role: 'assistant', content: fullText },
-                        finish_reason: 'stop',
-                    }],
-                    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-                });
+                resolved = true;
+                resolve(buildResponse('stop'));
             });
 
             h2Stream.on('error', (err) => {
+                if (resolved) return;
                 clearInterval(heartbeatTimer);
                 try { h2Client.close(); } catch {}
-                if (fullText) {
-                    resolve({
-                        id,
-                        object: 'chat.completion',
-                        created,
-                        model,
-                        choices: [{
-                            index: 0,
-                            message: { role: 'assistant', content: fullText },
-                            finish_reason: 'stop',
-                        }],
-                        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-                    });
+                resolved = true;
+                if (fullText || thinkingText) {
+                    resolve(buildResponse('stop'));
                 } else {
                     reject(err);
                 }
@@ -341,9 +393,12 @@ export class CursorApiService {
     }
 
     /**
-     * Streaming HTTP/2 request — yields SSE-compatible chunk objects.
+     * Streaming H2 consumer. Yields SSE-compatible chunk objects.
+     * Supports thinking tags, tool_calls with session save, and error handling.
+     *
+     * Used by both initial requests and session resumption.
      */
-    async *_doH2RequestStreaming({ accessToken, requestBytes, blobStore, mcpTools, model, sessionKey }) {
+    async *_streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey }) {
         const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 28)}`;
         const created = Math.floor(Date.now() / 1000);
         const makeChunk = (delta, finishReason = null) => ({
@@ -354,19 +409,10 @@ export class CursorApiService {
             choices: [{ index: 0, delta, finish_reason: finishReason }],
         });
 
-        const { client: h2Client, stream: h2Stream } = h2RequestStream({ accessToken });
-        h2Stream.write(frameConnectMessage(requestBytes));
-
-        const heartbeatTimer = setInterval(() => {
-            if (!h2Stream.closed && !h2Stream.destroyed) {
-                h2Stream.write(buildHeartbeatBytes());
-            }
-        }, 5_000);
-
         const state = { thinkingActive: false, toolCallIndex: 0, pendingExecs: [] };
         let mcpExecReceived = false;
 
-        // Use a queue+signal pattern to bridge event-driven H2 and async generator
+        // Queue+signal pattern to bridge event-driven H2 and async generator
         const queue = [];
         let done = false;
         let resolveWaiter = null;
@@ -474,7 +520,7 @@ export class CursorApiService {
             enqueue({ type: 'done' });
         });
 
-        h2Stream.on('error', (err) => {
+        h2Stream.on('error', () => {
             clearInterval(heartbeatTimer);
             if (!mcpExecReceived) {
                 try { h2Client.close(); } catch {}
@@ -499,253 +545,10 @@ export class CursorApiService {
         }
     }
 
-    /**
-     * Resume a paused session (tool_calls) — non-streaming path.
-     */
-    async _resumeNonStreaming(session, toolResults, model, sessionKey) {
-        const { h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, pendingExecs } = session;
-        const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 28)}`;
-        const created = Math.floor(Date.now() / 1000);
+    // ---------- Internal: model fetching ----------
 
-        const frames = buildToolResultFrames(pendingExecs, toolResults);
-        for (const frame of frames) {
-            if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(frame);
-        }
-
-        // Re-attach listeners
-        h2Stream.removeAllListeners('data');
-        h2Stream.removeAllListeners('end');
-        h2Stream.removeAllListeners('error');
-
-        let fullText = '';
-        let pendingBuffer = Buffer.alloc(0);
-
-        return new Promise((resolve, reject) => {
-            h2Stream.on('data', (incoming) => {
-                pendingBuffer = Buffer.concat([pendingBuffer, incoming]);
-                while (pendingBuffer.length >= 5) {
-                    const flags = pendingBuffer[0];
-                    const msgLen = pendingBuffer.readUInt32BE(1);
-                    if (pendingBuffer.length < 5 + msgLen) break;
-                    const msgBytes = pendingBuffer.subarray(5, 5 + msgLen);
-                    pendingBuffer = pendingBuffer.subarray(5 + msgLen);
-                    if (flags & CONNECT_END_STREAM_FLAG) {
-                        try {
-                            const endPayload = JSON.parse(msgBytes.toString('utf8'));
-                            if (endPayload?.error) {
-                                const detail = endPayload.error.details?.[0]?.debug?.details?.detail || endPayload.error.message;
-                                logger.error(`[CursorApiService] Cursor streaming API error: ${detail}`);
-                                throw Object.assign(new Error(detail), { status: 400 });
-                            }
-                        } catch (e) { if (e.status) throw e; }
-                        continue;
-                    }
-                    try {
-                        processAgentServerMessage(msgBytes, {
-                            blobStore,
-                            mcpTools,
-                            sendFrame: (data) => {
-                                if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(data);
-                            },
-                            onText: (text) => { fullText += text; },
-                            onMcpExec: () => {},
-                        });
-                    } catch {}
-                }
-            });
-
-            h2Stream.on('end', () => {
-                clearInterval(heartbeatTimer);
-                try { h2Client.close(); } catch {}
-                resolve({
-                    id,
-                    object: 'chat.completion',
-                    created,
-                    model,
-                    choices: [{
-                        index: 0,
-                        message: { role: 'assistant', content: fullText },
-                        finish_reason: 'stop',
-                    }],
-                    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-                });
-            });
-
-            h2Stream.on('error', (err) => {
-                clearInterval(heartbeatTimer);
-                try { h2Client.close(); } catch {}
-                if (fullText) {
-                    resolve({
-                        id,
-                        object: 'chat.completion',
-                        created,
-                        model,
-                        choices: [{
-                            index: 0,
-                            message: { role: 'assistant', content: fullText },
-                            finish_reason: 'stop',
-                        }],
-                        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-                    });
-                } else {
-                    reject(err);
-                }
-            });
-        });
-    }
-
-    /**
-     * Resume a paused session (tool_calls) — streaming path.
-     */
-    async *_resumeStreaming(session, toolResults, model, sessionKey) {
-        const { h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, pendingExecs } = session;
-        const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 28)}`;
-        const created = Math.floor(Date.now() / 1000);
-        const makeChunk = (delta, finishReason = null) => ({
-            id,
-            object: 'chat.completion.chunk',
-            created,
-            model,
-            choices: [{ index: 0, delta, finish_reason: finishReason }],
-        });
-
-        const frames = buildToolResultFrames(pendingExecs, toolResults);
-        for (const frame of frames) {
-            if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(frame);
-        }
-
-        h2Stream.removeAllListeners('data');
-        h2Stream.removeAllListeners('end');
-        h2Stream.removeAllListeners('error');
-
-        const state = { thinkingActive: false, toolCallIndex: 0, pendingExecs: [] };
-        let mcpExecReceived = false;
-
-        const queue = [];
-        let done = false;
-        let resolveWaiter = null;
-
-        function enqueue(item) {
-            queue.push(item);
-            if (resolveWaiter) {
-                const r = resolveWaiter;
-                resolveWaiter = null;
-                r();
-            }
-        }
-
-        function waitForItem() {
-            return new Promise((r) => { resolveWaiter = r; });
-        }
-
-        let pendingBuffer = Buffer.alloc(0);
-
-        h2Stream.on('data', (incoming) => {
-            pendingBuffer = Buffer.concat([pendingBuffer, incoming]);
-            while (pendingBuffer.length >= 5) {
-                const flags = pendingBuffer[0];
-                const msgLen = pendingBuffer.readUInt32BE(1);
-                if (pendingBuffer.length < 5 + msgLen) break;
-                const msgBytes = pendingBuffer.subarray(5, 5 + msgLen);
-                pendingBuffer = pendingBuffer.subarray(5 + msgLen);
-
-                if (flags & CONNECT_END_STREAM_FLAG) {
-                    const err = parseConnectFrame(msgBytes);
-                    if (err) enqueue({ type: 'chunk', chunk: makeChunk({ content: `\n[Error: ${err.message}]` }) });
-                    continue;
-                }
-
-                try {
-                    processAgentServerMessage(msgBytes, {
-                        blobStore,
-                        mcpTools,
-                        sendFrame: (data) => {
-                            if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(data);
-                        },
-                        onText: (text, isThinking) => {
-                            if (isThinking) {
-                                if (!state.thinkingActive) {
-                                    state.thinkingActive = true;
-                                    enqueue({ type: 'chunk', chunk: makeChunk({ role: 'assistant', content: '<think>' }) });
-                                }
-                                enqueue({ type: 'chunk', chunk: makeChunk({ content: text }) });
-                            } else {
-                                if (state.thinkingActive) {
-                                    state.thinkingActive = false;
-                                    enqueue({ type: 'chunk', chunk: makeChunk({ content: '</think>' }) });
-                                }
-                                enqueue({ type: 'chunk', chunk: makeChunk({ content: text }) });
-                            }
-                        },
-                        onMcpExec: (exec) => {
-                            state.pendingExecs.push(exec);
-                            mcpExecReceived = true;
-
-                            if (state.thinkingActive) {
-                                state.thinkingActive = false;
-                                enqueue({ type: 'chunk', chunk: makeChunk({ content: '</think>' }) });
-                            }
-                            enqueue({ type: 'chunk', chunk: makeChunk({
-                                tool_calls: [{
-                                    index: state.toolCallIndex++,
-                                    id: exec.toolCallId,
-                                    type: 'function',
-                                    function: { name: exec.toolName, arguments: exec.decodedArgs },
-                                }],
-                            }) });
-
-                            saveSession(sessionKey, {
-                                h2Client,
-                                h2Stream,
-                                heartbeatTimer,
-                                blobStore,
-                                mcpTools,
-                                pendingExecs: state.pendingExecs,
-                            });
-
-                            enqueue({ type: 'chunk', chunk: makeChunk({}, 'tool_calls') });
-                            enqueue({ type: 'done' });
-                        },
-                    });
-                } catch (err) {
-                    logger.warn(`[CursorApiService] processAgentServerMessage error: ${err.message}`);
-                }
-            }
-        });
-
-        h2Stream.on('end', () => {
-            clearInterval(heartbeatTimer);
-            if (!mcpExecReceived) {
-                try { h2Client.close(); } catch {}
-                if (state.thinkingActive) {
-                    enqueue({ type: 'chunk', chunk: makeChunk({ content: '</think>' }) });
-                }
-                enqueue({ type: 'chunk', chunk: makeChunk({}, 'stop') });
-            }
-            enqueue({ type: 'done' });
-        });
-
-        h2Stream.on('error', () => {
-            clearInterval(heartbeatTimer);
-            if (!mcpExecReceived) {
-                try { h2Client.close(); } catch {}
-                enqueue({ type: 'chunk', chunk: makeChunk({}, 'stop') });
-            }
-            enqueue({ type: 'done' });
-        });
-
-        while (!done) {
-            while (queue.length > 0) {
-                const item = queue.shift();
-                if (item.type === 'done') { done = true; break; }
-                yield item.chunk;
-            }
-            if (!done) await waitForItem();
-        }
-        while (queue.length > 0) {
-            const item = queue.shift();
-            if (item.type === 'chunk') yield item.chunk;
-        }
+    async _ensureInitialized() {
+        if (!this.isInitialized) await this.initialize();
     }
 
     /**
@@ -775,16 +578,22 @@ export class CursorApiService {
 
     _fetchModelsViaH2(body, accessToken) {
         return new Promise((resolve) => {
+            let settled = false;
+            const settle = (value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                resolve(value);
+            };
+
             const client = http2.connect(CURSOR_API_URL);
-            const chunks = [];
-            let statusOk = false;
 
             const timeout = setTimeout(() => {
                 client.destroy();
-                resolve(null);
+                settle(null);
             }, 5000);
 
-            client.on('error', () => { clearTimeout(timeout); resolve(null); });
+            client.on('error', () => settle(null));
 
             const stream = client.request({
                 ':method': 'POST',
@@ -797,6 +606,9 @@ export class CursorApiService {
                 'x-cursor-client-type': 'cli',
             });
 
+            let statusOk = false;
+            const chunks = [];
+
             stream.on('response', (headers) => {
                 const status = headers[':status'];
                 statusOk = typeof status === 'number' && status >= 200 && status < 300;
@@ -805,13 +617,12 @@ export class CursorApiService {
             stream.on('data', (chunk) => chunks.push(chunk));
 
             stream.on('end', () => {
-                clearTimeout(timeout);
-                client.close();
-                if (!statusOk) { resolve(null); return; }
-                resolve(new Uint8Array(Buffer.concat(chunks)));
+                try { client.close(); } catch {}
+                if (!statusOk) { settle(null); return; }
+                settle(new Uint8Array(Buffer.concat(chunks)));
             });
 
-            stream.on('error', () => { clearTimeout(timeout); client.close(); resolve(null); });
+            stream.on('error', () => { try { client.close(); } catch {}; settle(null); });
 
             stream.write(body);
             stream.end();
@@ -862,4 +673,3 @@ export class CursorApiService {
         return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
     }
 }
-

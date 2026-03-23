@@ -11,6 +11,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { create, fromBinary, fromJson, toBinary, toJson } from '@bufbuild/protobuf';
 import { ValueSchema } from '@bufbuild/protobuf/wkt';
 
+import { frameConnectMessage } from './cursor-h2.js';
+
 import {
     AgentClientMessageSchema,
     AgentConversationTurnStructureSchema,
@@ -59,43 +61,6 @@ import {
     WriteShellStdinErrorSchema,
     WriteShellStdinResultSchema,
 } from './proto/agent_pb.js';
-
-// ============================================================================
-// Connect Protocol framing (re-exported for convenience)
-// ============================================================================
-
-export const CONNECT_END_STREAM_FLAG = 0x02;
-
-/**
- * Wrap data in a Connect Protocol frame (5-byte header).
- * @param {Uint8Array|Buffer} data
- * @param {number} [flags=0]
- * @returns {Buffer}
- */
-export function frameConnectMessage(data, flags = 0) {
-    const frame = Buffer.alloc(5 + data.length);
-    frame[0] = flags;
-    frame.writeUInt32BE(data.length, 1);
-    frame.set(data, 5);
-    return frame;
-}
-
-/**
- * Parse a Connect end-stream frame body (after the 5-byte header).
- * @param {Uint8Array} data
- * @returns {Error|null}
- */
-export function parseConnectFrame(data) {
-    try {
-        const p = JSON.parse(new TextDecoder().decode(data));
-        if (p?.error) {
-            return new Error(`Connect error ${p.error.code ?? 'unknown'}: ${p.error.message ?? 'Unknown'}`);
-        }
-        return null;
-    } catch {
-        return new Error('Failed to parse Connect end stream');
-    }
-}
 
 // ============================================================================
 // Message parsing

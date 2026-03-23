@@ -37,8 +37,11 @@ const activeSessions = new Map();
 export function deriveSessionKey(model, messages) {
     const firstUserMsg = messages.find((m) => m.role === 'user')?.content ?? '';
     const text = typeof firstUserMsg === 'string' ? firstUserMsg : JSON.stringify(firstUserMsg);
+    const msgCount = messages.length;
+    const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+    const lastContent = lastMsg ? JSON.stringify(lastMsg.content ?? '').slice(0, 100) : '';
     return createHash('sha256')
-        .update(`${model}:${text.slice(0, 200)}`)
+        .update(`${model}:${msgCount}:${text.slice(0, 200)}:${lastContent}`)
         .digest('hex')
         .slice(0, 16);
 }
