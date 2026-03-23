@@ -6,6 +6,7 @@
  *        buildToolResultFrames
  */
 
+import { describe, test, expect } from '@jest/globals';
 import {
     parseMessages,
     frameConnectMessage,
@@ -15,7 +16,7 @@ import {
     buildHeartbeatBytes,
     buildMcpToolDefinitions,
     buildToolResultFrames,
-} from '../../src/providers/cursor/cursor-protobuf.js';
+} from '../../../../src/providers/cursor/cursor-protobuf.js';
 
 // ============================================================================
 // parseMessages

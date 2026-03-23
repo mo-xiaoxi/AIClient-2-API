@@ -87,13 +87,13 @@ let mockProcessAgentServerMessage;
 
 beforeAll(async () => {
     // Logger
-    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+    await jest.unstable_mockModule('../../../../src/utils/logger.js', () => ({
         __esModule: true,
         default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
     }));
 
     // Token store
-    await jest.unstable_mockModule('../../src/providers/cursor/cursor-token-store.js', () => ({
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-token-store.js', () => ({
         CursorTokenStore: jest.fn().mockImplementation(() => ({
             initialize: jest.fn(),
             getValidAccessToken: jest.fn(async () => 'mock-token'),
@@ -102,7 +102,7 @@ beforeAll(async () => {
     }));
 
     // Session
-    await jest.unstable_mockModule('../../src/providers/cursor/cursor-session.js', () => ({
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-session.js', () => ({
         deriveSessionKey: jest.fn(() => 'session-key'),
         getSession: jest.fn(() => null),
         removeSession: jest.fn(),
@@ -111,7 +111,7 @@ beforeAll(async () => {
     }));
 
     // H2
-    await jest.unstable_mockModule('../../src/providers/cursor/cursor-h2.js', () => ({
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-h2.js', () => ({
         h2RequestStream: jest.fn(() => ({
             client: createMockH2Client(),
             stream: mockH2Stream,
@@ -120,7 +120,7 @@ beforeAll(async () => {
 
     // Protobuf helpers — keep CONNECT_END_STREAM_FLAG, mock the rest
     mockProcessAgentServerMessage = jest.fn();
-    await jest.unstable_mockModule('../../src/providers/cursor/cursor-protobuf.js', () => ({
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-protobuf.js', () => ({
         CONNECT_END_STREAM_FLAG,
         parseMessages: jest.fn(() => ({
             systemPrompt: 'You are a helpful assistant.',
@@ -142,7 +142,7 @@ beforeAll(async () => {
     }));
 
     // Proto schemas
-    await jest.unstable_mockModule('../../src/providers/cursor/proto/agent_pb.js', () => ({
+    await jest.unstable_mockModule('../../../../src/providers/cursor/proto/agent_pb.js', () => ({
         GetUsableModelsRequestSchema: {},
         GetUsableModelsResponseSchema: {},
     }));
@@ -155,7 +155,7 @@ beforeAll(async () => {
     }));
 
     // Now import the module under test
-    const mod = await import('../../src/providers/cursor/cursor-core.js');
+    const mod = await import('../../../../src/providers/cursor/cursor-core.js');
     CursorApiService = mod.CursorApiService;
 });
 

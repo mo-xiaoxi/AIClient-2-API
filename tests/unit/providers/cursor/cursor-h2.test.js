@@ -5,12 +5,13 @@
  *        CONNECT_END_STREAM_FLAG constant.
  */
 
+import { describe, test, expect } from '@jest/globals';
 import {
     buildCursorH2Headers,
     frameConnectMessage,
     parseConnectFrame,
     CONNECT_END_STREAM_FLAG,
-} from '../../src/providers/cursor/cursor-h2.js';
+} from '../../../../src/providers/cursor/cursor-h2.js';
 
 // ============================================================================
 // CONNECT_END_STREAM_FLAG

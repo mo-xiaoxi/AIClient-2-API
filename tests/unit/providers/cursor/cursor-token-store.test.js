@@ -14,7 +14,7 @@ const mockRefreshFn = jest.fn();
 let CursorTokenStore;
 
 beforeAll(async () => {
-    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+    await jest.unstable_mockModule('../../../../src/utils/logger.js', () => ({
         __esModule: true,
         default: {
             info: () => {},
@@ -23,11 +23,11 @@ beforeAll(async () => {
             debug: () => {},
         },
     }));
-    await jest.unstable_mockModule('../../src/auth/cursor-oauth.js', () => ({
+    await jest.unstable_mockModule('../../../../src/auth/cursor-oauth.js', () => ({
         __esModule: true,
         refreshCursorToken: (...args) => mockRefreshFn(...args),
     }));
-    const mod = await import('../../src/providers/cursor/cursor-token-store.js');
+    const mod = await import('../../../../src/providers/cursor/cursor-token-store.js');
     CursorTokenStore = mod.CursorTokenStore;
 });
 

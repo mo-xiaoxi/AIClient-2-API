@@ -20,7 +20,7 @@ let cleanupAllSessions;
 let getActiveSessionCount;
 
 beforeAll(async () => {
-    await jest.unstable_mockModule('../../src/utils/logger.js', () => ({
+    await jest.unstable_mockModule('../../../../src/utils/logger.js', () => ({
         __esModule: true,
         default: {
             info: () => {},
@@ -29,7 +29,7 @@ beforeAll(async () => {
             debug: () => {},
         },
     }));
-    const mod = await import('../../src/providers/cursor/cursor-session.js');
+    const mod = await import('../../../../src/providers/cursor/cursor-session.js');
     deriveSessionKey = mod.deriveSessionKey;
     saveSession = mod.saveSession;
     getSession = mod.getSession;
