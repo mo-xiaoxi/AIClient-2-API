@@ -33,9 +33,11 @@
 
 ### 1.2 仍存在的问题
 
-#### 问题 1: api-server.test.js — 5 个测试失败（超时约 120s）
+#### 问题 1: api-server.test.js — 5 个测试失败（超时约 120s）【已在主仓库修复，2026-03-24】
 
-失败用例：
+根因：`jest.useFakeTimers()` 导致 `listen` 回调/`startServer` 无法结束；`uses default argv` 断言与 Jest 注入的 `process.argv` 不一致。
+
+失败用例（历史记录）：
 - `startServer() › uses default argv and configPath when options not provided`
 - `startServer() › sets up cron interval when CRON_REFRESH_TOKEN is true`
 - `gracefulShutdown() › closes server in test mode without calling process.exit`
@@ -44,9 +46,9 @@
 
 **根因**: `api-server.js` 测试中有实际的异步操作（HTTP 服务器）未被正确 mock，导致 Jest 等待句柄。
 
-#### 问题 2: api-potluck-routes.test.js — 10 个测试失败（超时约 303s）
+#### 问题 2: api-potluck-routes.test.js — 10 个测试失败（超时约 303s）【已在主仓库修复，2026-03-24】
 
-**根因**: 路由测试中某些请求/响应对象 mock 不完整，或有未关闭的 Promise。
+**根因**: 在 `parseRequestBody` 注册 `data`/`end` 监听**之前**调用 `req._end()`，导致 body Promise 永不 resolve。修复：先调用 `handlePotluckApiRoutes`，再在 `setImmediate` 中 `_end()`。
 
 #### 问题 3: ui-manager.test.js — 已修复语法错误（`async () =>` 缺失）
 
