@@ -91,6 +91,17 @@ describe('system-api.js - handleGetSystem', () => {
         // existsSync is mocked to return false
         expect(body.appVersion).toBe('unknown');
     });
+
+    test('uses getCpuUsagePercent(pid) when IS_WORKER_PROCESS is true', async () => {
+        const prev = process.env.IS_WORKER_PROCESS;
+        process.env.IS_WORKER_PROCESS = 'true';
+        const monitor = await import('../../../src/ui-modules/system-monitor.js');
+        const req = {};
+        const res = createMockRes();
+        await handleGetSystem(req, res);
+        expect(monitor.getCpuUsagePercent).toHaveBeenCalledWith(process.pid);
+        process.env.IS_WORKER_PROCESS = prev;
+    });
 });
 
 describe('system-api.js - handleDownloadTodayLog', () => {
@@ -102,6 +113,43 @@ describe('system-api.js - handleDownloadTodayLog', () => {
         const body = JSON.parse(res.end.mock.calls[0][0]);
         expect(body.error.message).toContain('not found');
     });
+
+    test('pipes read stream when currentLogFile exists', async () => {
+        const logger = (await import('../../../src/utils/logger.js')).default;
+        const fs = await import('fs');
+        logger.currentLogFile = '/tmp/aiclient-test.log';
+        fs.existsSync.mockReturnValue(true);
+        const pipe = jest.fn();
+        fs.createReadStream.mockReturnValue({ pipe });
+        const res = createMockRes();
+        await handleDownloadTodayLog({}, res);
+        expect(fs.createReadStream).toHaveBeenCalledWith('/tmp/aiclient-test.log');
+        expect(pipe).toHaveBeenCalledWith(res);
+        expect(res.writeHead).toHaveBeenCalledWith(
+            200,
+            expect.objectContaining({
+                'Content-Type': 'text/plain',
+                'Content-Disposition': expect.stringContaining('attachment'),
+            }),
+        );
+        logger.currentLogFile = null;
+    });
+
+    test('returns 500 when createReadStream throws', async () => {
+        const logger = (await import('../../../src/utils/logger.js')).default;
+        const fs = await import('fs');
+        logger.currentLogFile = '/tmp/aiclient-test.log';
+        fs.existsSync.mockReturnValue(true);
+        fs.createReadStream.mockImplementationOnce(() => {
+            throw new Error('stream open failed');
+        });
+        const res = createMockRes();
+        await handleDownloadTodayLog({}, res);
+        expect(res.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.error.message).toContain('stream open failed');
+        logger.currentLogFile = null;
+    });
 });
 
 describe('system-api.js - handleClearTodayLog', () => {
@@ -112,6 +160,28 @@ describe('system-api.js - handleClearTodayLog', () => {
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
         const body = JSON.parse(res.end.mock.calls[0][0]);
         expect(body.success).toBe(true);
+    });
+
+    test('returns 500 when clearTodayLog returns false', async () => {
+        const logger = (await import('../../../src/utils/logger.js')).default;
+        logger.clearTodayLog.mockReturnValueOnce(false);
+        const res = createMockRes();
+        await handleClearTodayLog({}, res);
+        expect(res.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.success).toBe(false);
+    });
+
+    test('returns 500 when clearTodayLog throws', async () => {
+        const logger = (await import('../../../src/utils/logger.js')).default;
+        logger.clearTodayLog.mockImplementationOnce(() => {
+            throw new Error('clear failed');
+        });
+        const res = createMockRes();
+        await handleClearTodayLog({}, res);
+        expect(res.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.error.message).toContain('clear failed');
     });
 });
 

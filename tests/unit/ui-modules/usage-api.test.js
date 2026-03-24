@@ -129,6 +129,18 @@ describe('usage-api.js - handleGetUsage', () => {
         // readUsageCache should not be called for actual usage retrieval
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     });
+
+    test('returns 500 when writeUsageCache fails after fresh fetch', async () => {
+        const { readUsageCache, writeUsageCache } = await import('../../../src/ui-modules/usage-cache.js');
+        readUsageCache.mockResolvedValueOnce(null);
+        writeUsageCache.mockRejectedValueOnce(new Error('disk full'));
+        const req = createMockReq('http://localhost/api/usage');
+        const res = createMockRes();
+        await handleGetUsage(req, res, {}, null);
+        expect(res.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.error.message).toContain('disk full');
+    });
 });
 
 describe('usage-api.js - handleGetProviderUsage', () => {
@@ -154,5 +166,19 @@ describe('usage-api.js - handleGetProviderUsage', () => {
         await handleGetProviderUsage(req, res, {}, null, 'gemini-cli-oauth');
         const body = JSON.parse(res.end.mock.calls[0][0]);
         expect(body.fromCache).toBe(true);
+    });
+
+    test('returns 500 when updateProviderUsageCache fails', async () => {
+        const { readProviderUsageCache, updateProviderUsageCache } = await import(
+            '../../../src/ui-modules/usage-cache.js',
+        );
+        readProviderUsageCache.mockResolvedValueOnce(null);
+        updateProviderUsageCache.mockRejectedValueOnce(new Error('cache write failed'));
+        const req = createMockReq('http://localhost/api/usage/gemini-cli-oauth');
+        const res = createMockRes();
+        await handleGetProviderUsage(req, res, {}, null, 'gemini-cli-oauth');
+        expect(res.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.error.message).toContain('cache write failed');
     });
 });

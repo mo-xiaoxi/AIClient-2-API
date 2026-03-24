@@ -239,7 +239,10 @@ await jest.unstable_mockModule('../../../src/utils/tls-sidecar.js', () => ({
 
 ### 3.3 Jest 覆盖率阈值配置（Phase 1 完成后执行）
 
-在 `jest.config.js` 中添加：
+**现状（2026-03-24）**：已配置 **基线阈值**（约 statements/lines 41%、branches 34%、functions 50%），与当前 `pnpm run test:coverage` 实测对齐，用于 CI 防回退。
+
+达 **70% / 55% / 60% / 70%**（语句/分支/函数/行）后再改为需求文档中的全局阈值：
+
 ```js
 coverageThreshold: {
     global: {

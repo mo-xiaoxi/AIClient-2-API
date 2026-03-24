@@ -1,4 +1,7 @@
 import { describe, test, expect } from '@jest/globals';
+import { mkdtemp, writeFile, rm } from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 import {
     normalizePath,
     getFileName,
@@ -8,6 +11,10 @@ import {
     createProviderConfig,
     addToUsedPaths,
     isPathLinked,
+    formatSystemPath,
+    generateUUID,
+    isPathUsed,
+    isValidOAuthCredentials,
 } from '../../../src/utils/provider-utils.js';
 
 describe('provider-utils', () => {
@@ -53,5 +60,38 @@ describe('provider-utils', () => {
         const s = new Set();
         addToUsedPaths(s, './configs/x.json');
         expect(isPathLinked('configs/x.json', s)).toBe(true);
+    });
+
+    test('formatSystemPath adds leading dot for relative', () => {
+        const p = formatSystemPath('configs/foo.json');
+        expect(p.startsWith('.')).toBe(true);
+        expect(p).toContain('configs');
+    });
+
+    test('generateUUID matches v4 pattern', () => {
+        const u = generateUUID();
+        expect(u).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    });
+
+    test('isPathUsed matches filename in same logical dir', () => {
+        const used = new Set(['./configs/gemini/a.json']);
+        expect(isPathUsed('./configs/gemini/b.json', 'b.json', used)).toBe(false);
+        expect(isPathUsed('./configs/gemini/a.json', 'a.json', used)).toBe(true);
+    });
+
+    test('isValidOAuthCredentials true for access_token JSON', async () => {
+        const dir = await mkdtemp(path.join(os.tmpdir(), 'oauth-'));
+        const f = path.join(dir, 'c.json');
+        await writeFile(f, JSON.stringify({ access_token: 'x', refresh_token: 'y' }), 'utf8');
+        await expect(isValidOAuthCredentials(f)).resolves.toBe(true);
+        await rm(dir, { recursive: true });
+    });
+
+    test('isValidOAuthCredentials false for invalid file', async () => {
+        const dir = await mkdtemp(path.join(os.tmpdir(), 'oauth-'));
+        const f = path.join(dir, 'bad.json');
+        await writeFile(f, 'not json', 'utf8');
+        await expect(isValidOAuthCredentials(f)).resolves.toBe(false);
+        await rm(dir, { recursive: true });
     });
 });

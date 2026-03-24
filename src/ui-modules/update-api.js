@@ -641,3 +641,6 @@ export async function handlePerformUpdate(req, res) {
         return true;
     }
 }
+
+/** 供单元测试覆盖版本比较逻辑 */
+export { compareVersions };
