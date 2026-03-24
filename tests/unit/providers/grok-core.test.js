@@ -206,6 +206,26 @@ describe('GrokApiService — classifyApiError', () => {
         svc.classifyApiError(err);
         expect(err.shouldSwitchCredential).toBe(true);
     });
+
+    test('marks retryable network errors with skipErrorCount', async () => {
+        const { isRetryableNetworkError } = await import('../../../src/utils/common.js');
+        isRetryableNetworkError.mockReturnValueOnce(true);
+        const svc = makeService();
+        const err = { message: 'econnreset', code: 'ECONNRESET' };
+        svc.classifyApiError(err);
+        expect(err.shouldSwitchCredential).toBe(true);
+        expect(err.skipErrorCount).toBe(true);
+    });
+});
+
+describe('GrokApiService — genStatsigId', () => {
+    test('returns base64 payload containing TypeError text', () => {
+        const svc = makeService();
+        const id = svc.genStatsigId();
+        expect(typeof id).toBe('string');
+        const decoded = Buffer.from(id, 'base64').toString('utf8');
+        expect(decoded).toContain('TypeError');
+    });
 });
 
 describe('GrokApiService — getMaxRequestRetries', () => {

@@ -1,4 +1,5 @@
 import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { promises as fs } from 'fs';
 import {
     RETRYABLE_NETWORK_ERRORS,
     isRetryableNetworkError,
@@ -12,7 +13,12 @@ import {
     extractSystemPromptFromRequestBody,
     formatToLocal,
     handleError,
+    getRequestBody,
+    isAuthorized,
+    handleUnifiedResponse,
+    logConversation,
 } from '../../../src/utils/common.js';
+import logger from '../../../src/utils/logger.js';
 
 describe('isRetryableNetworkError', () => {
     test('returns false for null/undefined', () => {
@@ -195,6 +201,185 @@ describe('formatToLocal', () => {
     });
 });
 
+function makeMockReqForBody(bodyStr, { emitError } = {}) {
+    const listeners = {};
+    return {
+        on(event, cb) {
+            listeners[event] = cb;
+            return this;
+        },
+        _flush() {
+            if (emitError) {
+                listeners.error?.(emitError);
+                return;
+            }
+            if (bodyStr) listeners.data?.(Buffer.from(bodyStr));
+            listeners.end?.();
+        },
+    };
+}
+
+describe('getRequestBody', () => {
+    test('parses JSON object', async () => {
+        const req = makeMockReqForBody('{"a":1}');
+        const p = getRequestBody(req);
+        process.nextTick(() => req._flush());
+        await expect(p).resolves.toEqual({ a: 1 });
+    });
+
+    test('empty body resolves to {}', async () => {
+        const req = makeMockReqForBody('');
+        const p = getRequestBody(req);
+        process.nextTick(() => req._flush());
+        await expect(p).resolves.toEqual({});
+    });
+
+    test('invalid JSON rejects', async () => {
+        const req = makeMockReqForBody('{');
+        const p = getRequestBody(req);
+        process.nextTick(() => req._flush());
+        await expect(p).rejects.toThrow(/Invalid JSON/);
+    });
+
+    test('req error event rejects', async () => {
+        const req = makeMockReqForBody('', { emitError: new Error('net') });
+        const p = getRequestBody(req);
+        process.nextTick(() => req._flush());
+        await expect(p).rejects.toThrow('net');
+    });
+});
+
+describe('isAuthorized', () => {
+    const key = 'secret-key';
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test('Bearer token matches', () => {
+        const req = { headers: { authorization: `Bearer ${key}` } };
+        expect(isAuthorized(req, new URL('http://localhost/v1'), key)).toBe(true);
+    });
+
+    test('query key matches', () => {
+        const req = { headers: {} };
+        expect(isAuthorized(req, new URL(`http://localhost/x?key=${key}`), key)).toBe(true);
+    });
+
+    test('x-goog-api-key matches', () => {
+        const req = { headers: { 'x-goog-api-key': key } };
+        expect(isAuthorized(req, new URL('http://localhost/'), key)).toBe(true);
+    });
+
+    test('x-api-key matches', () => {
+        const req = { headers: { 'x-api-key': key } };
+        expect(isAuthorized(req, new URL('http://localhost/'), key)).toBe(true);
+    });
+
+    test('wrong key returns false', () => {
+        jest.spyOn(logger, 'info').mockImplementation(() => {});
+        const req = { headers: { authorization: 'Bearer wrong' } };
+        expect(isAuthorized(req, new URL('http://localhost/'), key)).toBe(false);
+    });
+});
+
+describe('handleUnifiedResponse', () => {
+    test('non-stream writes JSON and ends', async () => {
+        const res = {
+            writeHead: jest.fn(),
+            end: jest.fn(),
+        };
+        await handleUnifiedResponse(res, '{"ok":true}', false);
+        expect(res.writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'application/json' });
+        expect(res.end).toHaveBeenCalledWith('{"ok":true}');
+    });
+
+    test('stream sets SSE headers and does not end in handler', async () => {
+        const res = {
+            writeHead: jest.fn(),
+            end: jest.fn(),
+        };
+        await handleUnifiedResponse(res, null, true);
+        expect(res.writeHead).toHaveBeenCalledWith(
+            200,
+            expect.objectContaining({ 'Content-Type': 'text/event-stream' }),
+        );
+        expect(res.end).not.toHaveBeenCalled();
+    });
+});
+
+describe('logConversation', () => {
+    beforeEach(() => {
+        jest.spyOn(logger, 'info').mockImplementation(() => {});
+        jest.spyOn(logger, 'error').mockImplementation(() => {});
+        logger.info.mockClear();
+        logger.error.mockClear();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test('none mode does nothing', async () => {
+        await logConversation('in', 'x', 'none', '/tmp/a.log');
+        expect(logger.info).not.toHaveBeenCalled();
+    });
+
+    test('empty content returns', async () => {
+        await logConversation('in', '', 'console', null);
+        expect(logger.info).not.toHaveBeenCalled();
+    });
+
+    test('console mode logs via logger', async () => {
+        await logConversation('in', 'hello', 'console', null);
+        expect(logger.info).toHaveBeenCalled();
+    });
+
+    test('file mode appends', async () => {
+        jest.spyOn(fs, 'appendFile').mockResolvedValue(undefined);
+        await logConversation('in', 'line', 'file', '/tmp/test-conv.log');
+        expect(fs.appendFile).toHaveBeenCalledWith('/tmp/test-conv.log', expect.stringContaining('line'));
+    });
+
+    test('file mode logs error on failure', async () => {
+        jest.spyOn(fs, 'appendFile').mockRejectedValue(new Error('disk full'));
+        await logConversation('in', 'line', 'file', '/tmp/x');
+        expect(logger.error).toHaveBeenCalled();
+    });
+});
+
+describe('extractSystemPromptFromRequestBody (extra branches)', () => {
+    test('gemini: fallback to first user content in contents', () => {
+        const body = {
+            contents: [
+                {
+                    role: 'user',
+                    parts: [{ text: 'from-user' }],
+                },
+            ],
+        };
+        expect(extractSystemPromptFromRequestBody(body, MODEL_PROTOCOL_PREFIX.GEMINI)).toBe('from-user');
+    });
+
+    test('claude: system as object becomes JSON string', () => {
+        expect(
+            extractSystemPromptFromRequestBody({ system: { foo: 1 } }, MODEL_PROTOCOL_PREFIX.CLAUDE),
+        ).toBe('{"foo":1}');
+    });
+
+    test('claude: user message with array content blocks', () => {
+        const body = {
+            messages: [
+                {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'block' }],
+                },
+            ],
+        };
+        expect(extractSystemPromptFromRequestBody(body, MODEL_PROTOCOL_PREFIX.CLAUDE)).toBe('block');
+    });
+});
+
 describe('handleError', () => {
     beforeEach(() => {
         jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -236,5 +421,35 @@ describe('handleError', () => {
         };
         handleError(res, Object.assign(new Error('x'), { statusCode: 500 }), null);
         expect(res.end).not.toHaveBeenCalled();
+    });
+
+    test('403 includes permission suggestions for gemini provider', () => {
+        jest.spyOn(logger, 'error').mockImplementation(() => {});
+        const res = {
+            writableEnded: false,
+            destroyed: false,
+            headersSent: false,
+            writeHead: jest.fn(),
+            end: jest.fn(),
+        };
+        handleError(res, Object.assign(new Error('forbidden'), { statusCode: 403 }), 'gemini-cli-oauth');
+        const payload = JSON.parse(res.end.mock.calls[0][0]);
+        expect(payload.error.code).toBe(403);
+        expect(payload.error.suggestions.some((s) => /Google Cloud|Gemini/i.test(s))).toBe(true);
+    });
+
+    test('429 rate limit message', () => {
+        jest.spyOn(logger, 'error').mockImplementation(() => {});
+        const res = {
+            writableEnded: false,
+            destroyed: false,
+            headersSent: false,
+            writeHead: jest.fn(),
+            end: jest.fn(),
+        };
+        handleError(res, Object.assign(new Error(''), { statusCode: 429 }), 'openai-custom');
+        const payload = JSON.parse(res.end.mock.calls[0][0]);
+        expect(payload.error.code).toBe(429);
+        expect(payload.error.message).toContain('Too many requests');
     });
 });
