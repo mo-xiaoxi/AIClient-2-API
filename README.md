@@ -22,6 +22,32 @@
 
 </div>
 
+## 💎 Sponsors
+
+<table width="100%">
+  <tr>
+    <td width="25%" align="center" valign="middle">
+      <a href="https://www.packyapi.com/register?aff=AIClient2API">
+        <img src="static/packycode.png" alt="PackyCode Sponsor" width="180">
+      </a>
+    </td>
+    <td width="75%" align="left" valign="middle">
+      PackyCode is a reliable and efficient API relay service provider, offering relay services for Claude Code, Codex, Gemini, and more. PackyCode provides special discounts for our software users: <a href="https://www.packyapi.com/register?aff=AIClient2API">register using this link</a> and enter the <strong>AIClient2API</strong> promo code during recharge to get <strong>10% off</strong>.
+    </td>
+  </tr>
+  <tr>
+    <td width="25%" align="center" valign="middle">
+      <img src="static/wechat.png" alt="Sponsor Contact" width="150">
+    </td>
+    <td width="75%" align="left" valign="middle">
+      <strong>Become a Sponsor</strong><br>
+      If you would like to sponsor this project, please scan the WeChat QR code on the left (Please state your intent: <strong>Sponsorship</strong>).
+    </td>
+  </tr>
+</table>
+
+---
+
 `AIClient2API` 是一个突破客户端限制的 API 代理服务，将 Gemini、Antigravity、Qwen Code、Kiro 等原本仅限客户端内使用的免费大模型，转换为可供任何应用调用的标准 OpenAI 兼容接口。基于 Node.js 构建，支持 OpenAI、Claude、Gemini 三大协议的智能互转，让 Cherry-Studio、NextChat、Cline 等工具能够免费大量使用 Claude Opus 4.5、Gemini 3.0 Pro、Qwen3 Coder Plus 等高级模型。项目采用策略模式和适配器模式的模块化架构，内置账号池管理、智能轮询、自动故障转移和健康检查机制，确保 99.9% 的服务可用性。
 
 > [!NOTE]
