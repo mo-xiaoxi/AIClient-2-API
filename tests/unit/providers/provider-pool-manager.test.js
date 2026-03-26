@@ -673,6 +673,20 @@ describe('ProviderPoolManager', () => {
     // markProviderNeedRefresh
     // ==============================
     describe('markProviderNeedRefresh', () => {
+        beforeEach(() => {
+            // 让 refreshToken 返回挂起的 Promise，使刷新不会同步完成，
+            // 避免 _refreshNodeToken 在第一个 await 前同步抛错，
+            // 进而触发 markProviderUnhealthyImmediately 同步重置 needsRefresh=false
+            mockGetServiceAdapter.mockReturnValue({
+                refreshToken: jest.fn(() => new Promise(() => {})),
+                forceRefreshToken: jest.fn(() => new Promise(() => {})),
+            });
+        });
+
+        afterEach(() => {
+            mockGetServiceAdapter.mockReset();
+        });
+
         test('sets needsRefresh=true', () => {
             const cfg = makeConfig('u1');
             manager = new ProviderPoolManager({ 'openai-custom': [cfg] });
