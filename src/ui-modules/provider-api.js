@@ -90,7 +90,7 @@ async function fetchDynamicModels(providerType, providerPoolManager) {
         }
         return null;
     } catch (err) {
-        logger.debug(`[ProviderAPI] Dynamic model fetch for ${providerType} failed: ${err.message}`);
+        logger.warn(`[ProviderAPI] Dynamic model fetch for ${providerType} failed: ${err.message}`);
         return null;
     }
 }
