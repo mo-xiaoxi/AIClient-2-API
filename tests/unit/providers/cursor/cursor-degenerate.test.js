@@ -69,6 +69,10 @@ beforeAll(async () => {
         })),
     }));
 
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-vision.js', () => ({
+        preprocessImages: jest.fn(async (msgs) => msgs),
+    }));
+
     await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-protobuf.js', () => ({
         parseMessages: jest.fn(() => ({
             systemPrompt: '',

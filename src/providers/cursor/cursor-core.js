@@ -39,6 +39,7 @@ import {
 } from './cursor-truncation.js';
 import { compressMessages } from './cursor-compression.js';
 import { createStreamGuard } from './cursor-stream-guard.js';
+import { preprocessImages } from './cursor-vision.js';
 import {
     GetUsableModelsRequestSchema,
     GetUsableModelsResponseSchema,
@@ -259,6 +260,7 @@ export class CursorApiService {
         const accessToken = await this._tokenStore.getValidAccessToken();
 
         let messages = requestBody.messages || [];
+        messages = await preprocessImages(messages);
         if (CURSOR_COMPRESSION_ENABLED) {
             messages = compressMessages(messages, {
                 level: CURSOR_COMPRESSION_LEVEL,
@@ -322,6 +324,7 @@ export class CursorApiService {
         const accessToken = await this._tokenStore.getValidAccessToken();
 
         let messages = requestBody.messages || [];
+        messages = await preprocessImages(messages);
         if (CURSOR_COMPRESSION_ENABLED) {
             messages = compressMessages(messages, {
                 level: CURSOR_COMPRESSION_LEVEL,

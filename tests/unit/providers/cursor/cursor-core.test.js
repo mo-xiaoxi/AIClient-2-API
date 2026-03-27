@@ -171,6 +171,11 @@ beforeAll(async () => {
         })),
     }));
 
+    // Vision
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-vision.js', () => ({
+        preprocessImages: jest.fn(async (msgs) => msgs),
+    }));
+
     // Protobuf helpers
     mockProcessAgentServerMessage = jest.fn();
     await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-protobuf.js', () => ({
