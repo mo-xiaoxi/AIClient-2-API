@@ -7,6 +7,7 @@
 
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
+import logger from '../../utils/logger.js';
 
 const CURSOR_API_URL = 'https://api2.cursor.sh';
 const CURSOR_CLIENT_VERSION = 'cli-2026.02.13-41ac335';
@@ -172,9 +173,10 @@ export function h2RequestUnary({ accessToken, path, bodyBytes, timeoutMs = 30000
  */
 export function h2RequestStream({ accessToken, path = '/agent.v1.AgentService/Run' }) {
     const client = http2.connect(CURSOR_API_URL);
-    // Swallow connection-level errors to prevent unhandled rejection;
-    // stream-level errors are handled by callers.
-    client.on('error', () => {});
+    // Log connection-level errors; stream-level errors are handled by callers.
+    client.on('error', (err) => {
+        logger.warn(`[CursorH2] Connection-level error: ${err.message}`);
+    });
 
     const headers = buildCursorH2Headers(accessToken, path);
     const stream = client.request(headers);

@@ -312,6 +312,7 @@ export class CursorApiService {
                 h2Stream.write(buildHeartbeatBytes());
             }
         }, 5_000);
+        if (heartbeatTimer.unref) heartbeatTimer.unref();
 
         return this._collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt, accessToken });
     }
@@ -377,6 +378,7 @@ export class CursorApiService {
                 h2Stream.write(buildHeartbeatBytes());
             }
         }, 5_000);
+        if (heartbeatTimer.unref) heartbeatTimer.unref();
 
         yield* this._streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt, accessToken });
     }
@@ -518,6 +520,7 @@ export class CursorApiService {
                             reject(errFrame.error);
                             return;
                         }
+                        // Non-error end-stream trailer — skip and let H2 'end' event handle completion
                         continue;
                     }
                     try {
@@ -593,6 +596,7 @@ export class CursorApiService {
                         });
                     } catch (err) {
                         logger.warn(`[CursorApiService] Auto-continue failed: ${err.message}`);
+                        fullText += '\n\n[Warning: Response may be truncated — auto-continue failed]';
                     }
                 }
 
@@ -680,8 +684,10 @@ export class CursorApiService {
                 if (flags & CONNECT_END_STREAM_FLAG) {
                     const errFrame = parseConnectErrorFrame(msgBytes);
                     if (errFrame) {
-                        enqueue({ type: 'chunk', chunk: makeChunk({ content: `\n[Error: ${errFrame.error.message}]` }) });
+                        logger.error(`[CursorApiService] Cursor API stream error (${errFrame.error.connectCode}): ${errFrame.error.message}`);
+                        enqueue({ type: 'error', error: errFrame.error });
                     }
+                    // End-stream frame signals no more data; H2 'end' event handles completion
                     continue;
                 }
 
@@ -814,6 +820,16 @@ export class CursorApiService {
                     done = true;
                     break;
                 }
+                if (item.type === 'error') {
+                    // Emit error as a distinct SSE error event, then stop
+                    if (state.thinkingActive) {
+                        state.thinkingActive = false;
+                        yield makeChunk({ content: '</think>' });
+                    }
+                    yield makeChunk({ content: `\n[Error: ${item.error.message}]` }, 'stop');
+                    done = true;
+                    break;
+                }
                 if (item.type === 'continue_needed') {
                     // Auto-continue streaming: transparently yield continuation chunks
                     try {
@@ -839,6 +855,7 @@ export class CursorApiService {
                         }
                     } catch (err) {
                         logger.warn(`[CursorApiService] Stream auto-continue failed: ${err.message}`);
+                        yield makeChunk({ content: '\n\n[Warning: Response may be truncated — auto-continue failed]' });
                     }
                     // Emit the stop chunk after continuation
                     yield makeChunk({}, 'stop');

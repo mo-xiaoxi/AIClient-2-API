@@ -10,6 +10,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
+import logger from '../../utils/logger.js';
 
 const SMART_DOUBLE_QUOTES = new Set([
     '\u00ab', '\u201c', '\u201d', '\u275e',
@@ -103,8 +104,9 @@ export function repairExactMatchToolArguments(toolName, args) {
             if ('new_string' in args) args.new_string = fixed;
             else if ('new_str' in args) args.new_str = fixed;
         }
-    } catch {
+    } catch (err) {
         // best-effort: file read failure doesn't block the request
+        logger.debug(`[CursorToolFixer] File read failed for ${filePath}: ${err.message}`);
     }
 
     return args;

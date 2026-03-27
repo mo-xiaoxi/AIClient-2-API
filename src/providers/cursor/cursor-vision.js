@@ -115,7 +115,11 @@ function isSvg(url) {
  */
 async function processWithLocalOCR(imageUrls) {
     const { createWorker } = await import('tesseract.js');
-    const worker = await createWorker('eng+chi_sim');
+    const OCR_INIT_TIMEOUT_MS = 30_000;
+    const worker = await Promise.race([
+        createWorker('eng+chi_sim'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('OCR worker init timed out')), OCR_INIT_TIMEOUT_MS)),
+    ]);
     let combined = '';
 
     try {
@@ -161,7 +165,7 @@ async function callVisionAPI(imageUrls) {
             body: JSON.stringify({
                 model: VISION_API_MODEL,
                 messages: [{ role: 'user', content: parts }],
-                max_tokens: 1500,
+                max_tokens: Math.min(500 + imageUrls.length * 1000, 4096),
             }),
             signal: controller.signal,
         });
