@@ -35,11 +35,6 @@ async function loadSystemInfo() {
 
         if (appVersionEl) appVersionEl.textContent = data.appVersion ? `v${data.appVersion}` : '--';
         
-        // 自动检查更新
-        if (data.appVersion) {
-            checkUpdate(true);
-        }
-
         if (nodeVersionEl) nodeVersionEl.textContent = data.nodeVersion || '--';
         if (memoryUsageEl) memoryUsageEl.textContent = data.memoryUsage || '--';
         if (cpuUsageEl) cpuUsageEl.textContent = data.cpuUsage || '--';
@@ -3353,153 +3348,6 @@ function showRestartRequiredModal(version) {
     });
 }
 
-/**
- * 检查更新
- * @param {boolean} silent - 是否静默检查（不显示 Toast）
- */
-async function checkUpdate(silent = false) {
-    const checkBtn = document.getElementById('checkUpdateBtn');
-    const updateBtn = document.getElementById('performUpdateBtn');
-    const updateBadge = document.getElementById('updateBadge');
-    const latestVersionText = document.getElementById('latestVersionText');
-    const checkBtnIcon = checkBtn?.querySelector('i');
-    const checkBtnText = checkBtn?.querySelector('span');
-
-    try {
-        if (!silent && checkBtn) {
-            checkBtn.disabled = true;
-            if (checkBtnIcon) checkBtnIcon.className = 'fas fa-spinner fa-spin';
-            if (checkBtnText) checkBtnText.textContent = t('dashboard.update.checking');
-        }
-
-        const data = await window.apiClient.get('/check-update');
-
-        if (data.hasUpdate) {
-            if (updateBtn) updateBtn.style.display = 'inline-flex';
-            if (updateBadge) updateBadge.style.display = 'inline-flex';
-            if (latestVersionText) latestVersionText.textContent = data.latestVersion;
-            
-            if (!silent) {
-                showToast(t('common.info'), t('dashboard.update.hasUpdate', { version: data.latestVersion }), 'info');
-            }
-        } else {
-            if (updateBtn) updateBtn.style.display = 'none';
-            if (updateBadge) updateBadge.style.display = 'none';
-            if (!silent) {
-                showToast(t('common.info'), t('dashboard.update.upToDate'), 'success');
-            }
-        }
-    } catch (error) {
-        console.error('Check update failed:', error);
-        if (!silent) {
-            showToast(t('common.error'), t('dashboard.update.failed', { error: error.message }), 'error');
-        }
-    } finally {
-        if (checkBtn) {
-            checkBtn.disabled = false;
-            if (checkBtnIcon) checkBtnIcon.className = 'fas fa-sync-alt';
-            if (checkBtnText) checkBtnText.textContent = t('dashboard.update.check');
-        }
-    }
-}
-
-/**
- * 执行更新
- */
-async function performUpdate() {
-    const updateBtn = document.getElementById('performUpdateBtn');
-    const latestVersionText = document.getElementById('latestVersionText');
-    const version = latestVersionText?.textContent || '';
-
-    if (!confirm(t('dashboard.update.confirmMsg', { version }))) {
-        return;
-    }
-
-    const updateBtnIcon = updateBtn?.querySelector('i');
-    const updateBtnText = updateBtn?.querySelector('span');
-
-    try {
-        if (updateBtn) {
-            updateBtn.disabled = true;
-            if (updateBtnIcon) updateBtnIcon.className = 'fas fa-spinner fa-spin';
-            if (updateBtnText) updateBtnText.textContent = t('dashboard.update.updating');
-        }
-
-        showToast(t('common.info'), t('dashboard.update.updating'), 'info');
-
-        const data = await window.apiClient.post('/update');
-
-        if (data.success) {
-            if (data.updated) {
-                // 代码已更新，直接调用重启服务
-                showToast(t('common.success'), t('dashboard.update.success'), 'success');
-                
-                // 自动重启服务
-                await restartServiceAfterUpdate();
-            } else {
-                // 已是最新版本
-                showToast(t('common.info'), t('dashboard.update.upToDate'), 'info');
-            }
-        }
-    } catch (error) {
-        console.error('Update failed:', error);
-        showToast(t('common.error'), t('dashboard.update.failed', { error: error.message }), 'error');
-    } finally {
-        if (updateBtn) {
-            updateBtn.disabled = false;
-            if (updateBtnIcon) updateBtnIcon.className = 'fas fa-download';
-            if (updateBtnText) updateBtnText.textContent = t('dashboard.update.perform');
-        }
-    }
-}
-
-/**
- * 更新后自动重启服务
- */
-async function restartServiceAfterUpdate() {
-    try {
-        showToast(t('common.info'), t('header.restart.requesting'), 'info');
-        
-        const token = localStorage.getItem('authToken');
-        const response = await fetch('/api/restart-service', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : ''
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok && result.success) {
-            showToast(t('common.success'), result.message || t('header.restart.success'), 'success');
-            
-            // 如果是 worker 模式，服务会自动重启，等待几秒后刷新页面
-            if (result.mode === 'worker') {
-                setTimeout(() => {
-                    showToast(t('common.info'), t('header.restart.reconnecting'), 'info');
-                    // 等待服务重启后刷新页面
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
-                }, 2000);
-            }
-        } else {
-            // 显示错误信息
-            const errorMsg = result.message || result.error?.message || t('header.restart.failed');
-            showToast(t('common.error'), errorMsg, 'error');
-            
-            // 如果是独立模式，显示提示
-            if (result.mode === 'standalone') {
-                showToast(t('common.info'), result.hint, 'warning');
-            }
-        }
-    } catch (error) {
-        console.error('Restart after update failed:', error);
-        showToast(t('common.error'), t('header.restart.failed') + ': ' + error.message, 'error');
-    }
-}
-
 export {
     loadSystemInfo,
     updateTimeDisplay,
@@ -3509,7 +3357,5 @@ export {
     openProviderManager,
     showAuthModal,
     executeGenerateAuthUrl,
-    handleGenerateAuthUrl,
-    checkUpdate,
-    performUpdate
+    handleGenerateAuthUrl
 };

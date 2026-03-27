@@ -34,7 +34,7 @@ const GITLAB_CHAT_ENDPOINT = '/api/v4/chat/completions';
 const OPENAI_CHAT_PATH = '/chat/completions';
 
 // Request headers matching Go executor reference
-const GITLAB_USER_AGENT = 'AIClient-2-API/GitLab-Duo';
+const GITLAB_USER_AGENT = 'APIBridge/GitLab-Duo';
 const GITLAB_SSE_STREAMING_HEADER = 'X-Supports-Sse-Streaming';
 
 // Model cache TTL: 5 minutes

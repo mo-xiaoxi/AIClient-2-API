@@ -2,8 +2,8 @@
 const translations = {
     'zh-CN': {
         // Header
-        'header.title': 'AIClient2API 管理控制台',
-        'header.description': 'AIClient2API 管理控制台 - 统一管理 AI 服务提供商',
+        'header.title': 'APIBridge 管理控制台',
+        'header.description': 'APIBridge 管理控制台 - 统一管理 AI 服务提供商',
         'header.github': 'GitHub 仓库',
         'header.themeToggle': '切换主题',
         'header.status.connecting': '连接中...',
@@ -41,21 +41,6 @@ const translations = {
         'dashboard.uptime': '运行时间',
         'dashboard.systemInfo': '系统信息',
         'dashboard.version': '版本号',
-        'dashboard.update.check': '检查更新',
-        'dashboard.update.checkTitle': '检查是否有新版本可用',
-        'dashboard.update.perform': '立即更新',
-        'dashboard.update.performTitle': '更新到最新版本',
-        'dashboard.update.checking': '正在检查...',
-        'dashboard.update.upToDate': '已是最新',
-        'dashboard.update.hasUpdate': '发现新版本: {version}',
-        'dashboard.update.updating': '正在更新...',
-        'dashboard.update.success': '更新成功',
-        'dashboard.update.needsRestart': '代码已更新，请点击右上角「重启」按钮使更改生效',
-        'dashboard.update.restartTitle': '更新完成',
-        'dashboard.update.restartMsg': '代码已更新到版本 {version}，请点击页面右上角的「重启」按钮使新代码生效。',
-        'dashboard.update.failed': '更新失败: {error}',
-        'dashboard.update.confirmTitle': '确认更新',
-        'dashboard.update.confirmMsg': '确定要更新到版本 {version} 吗？更新期间服务可能会短暂不可用。',
         'dashboard.nodeVersion': 'Node.js版本',
         'dashboard.serverTime': '服务器时间',
         'dashboard.memoryUsage': '内存使用',
@@ -92,16 +77,7 @@ const translations = {
         'dashboard.routing.nodeName.codex': 'OpenAI Codex OAuth',
         'dashboard.routing.nodeName.grok': 'Grok Reverse',
         'dashboard.routing.nodeName.cursor': 'Cursor OAuth',
-        'dashboard.contact.title': '联系与赞助',
-        'dashboard.contact.wechat': '扫码进群，注明来意',
-        'dashboard.contact.wechatDesc': '添加微信获取更多技术支持和交流',
-        'dashboard.contact.x': '关注 X.com',
-        'dashboard.contact.xDesc': '在 X 上关注我们获取最新动态',
-        'dashboard.contact.sponsor': '扫码赞助',
-        'dashboard.contact.sponsorDesc': '您的赞助是项目持续发展的动力',
-        'dashboard.contact.coffee': 'Buy me a coffee',
-        'dashboard.contact.coffeeDesc': 'If you like this project, buy me a coffee!',
-        
+
         // OAuth
         'oauth.modal.title': 'OAuth 授权',
         'oauth.modal.provider': '提供商:',
@@ -677,11 +653,13 @@ const translations = {
         'models.copiedCurl': '已复制 curl 命令',
         'models.clickToCopy': '点击复制',
         'models.clickToCopyCurl': '点击复制 curl 命令',
+        'models.copyAsOpenAI': '复制为 OpenAI 格式 curl',
+        'models.copyAsClaude': '复制为 Claude 格式 curl',
 
         // Guide
         'guide.title': '使用指南',
         'guide.intro.title': '项目简介',
-        'guide.intro.desc': 'AIClient2API 是一个突破客户端限制的 API 代理服务，将 Gemini、Antigravity、Qwen Code、Kiro 等原本仅限客户端内使用的免费大模型，转换为可供任何应用调用的标准 OpenAI 兼容接口。',
+        'guide.intro.desc': 'APIBridge 是一个突破客户端限制的 API 代理服务，将 Gemini、Antigravity、Qwen Code、Kiro 等原本仅限客户端内使用的免费大模型，转换为可供任何应用调用的标准 OpenAI 兼容接口。',
         'guide.intro.feature1.title': '统一接入',
         'guide.intro.feature1.desc': '通过标准 OpenAI 兼容协议，一次配置即可接入多种大模型',
         'guide.intro.feature2.title': '突破限制',
@@ -844,7 +822,7 @@ const translations = {
         'common.found': '已找到',
         'common.missing': '缺失',
         'common.search': '搜索',
-        'common.welcome': '欢迎使用AIClient2API管理控制台！',
+        'common.welcome': '欢迎使用APIBridge管理控制台！',
         'common.fileType': '不支持的文件类型，请选择 JSON、TXT、KEY、PEM、P12 或 PFX 文件',
         'common.fileSize': '文件大小不能超过 5MB',
         'common.uploadSuccess': '文件上传成功',
@@ -859,7 +837,7 @@ const translations = {
         'common.refresh.failed': '刷新失败',
         
         // Login
-        'login.title': '登录 - AIClient2API',
+        'login.title': '登录 - APIBridge',
         'login.heading': '请登录以继续',
         'login.password': '密码',
         'login.passwordPlaceholder': '请输入密码',
@@ -877,8 +855,8 @@ const translations = {
     },
     'en-US': {
         // Header
-        'header.title': 'AIClient2API Management Console',
-        'header.description': 'AIClient2API Management Console - Unified management of AI service providers',
+        'header.title': 'APIBridge Management Console',
+        'header.description': 'APIBridge Management Console - Unified management of AI service providers',
         'header.github': 'GitHub Repository',
         'header.themeToggle': 'Toggle Theme',
         'header.status.connecting': 'Connecting...',
@@ -916,21 +894,6 @@ const translations = {
         'dashboard.uptime': 'Uptime',
         'dashboard.systemInfo': 'System Information',
         'dashboard.version': 'Version',
-        'dashboard.update.check': 'Check Update',
-        'dashboard.update.checkTitle': 'Check for new version',
-        'dashboard.update.perform': 'Update Now',
-        'dashboard.update.performTitle': 'Update to latest version',
-        'dashboard.update.checking': 'Checking...',
-        'dashboard.update.upToDate': 'Up to date',
-        'dashboard.update.hasUpdate': 'New version available: {version}',
-        'dashboard.update.updating': 'Updating...',
-        'dashboard.update.success': 'Update successful',
-        'dashboard.update.needsRestart': 'Code updated, please click the "Restart" button in the top right corner for changes to take effect',
-        'dashboard.update.restartTitle': 'Update Complete',
-        'dashboard.update.restartMsg': 'Code has been updated to version {version}. Please click the "Restart" button in the top right corner for the new code to take effect.',
-        'dashboard.update.failed': 'Update failed: {error}',
-        'dashboard.update.confirmTitle': 'Confirm Update',
-        'dashboard.update.confirmMsg': 'Are you sure you want to update to version {version}? Service might be briefly unavailable during update.',
         'dashboard.nodeVersion': 'Node.js Version',
         'dashboard.serverTime': 'Server Time',
         'dashboard.memoryUsage': 'Memory Usage',
@@ -967,16 +930,7 @@ const translations = {
         'dashboard.routing.nodeName.codex': 'OpenAI Codex OAuth',
         'dashboard.routing.nodeName.grok': 'Grok Reverse',
         'dashboard.routing.nodeName.cursor': 'Cursor OAuth',
-        'dashboard.contact.title': 'Contact & Support',
-        'dashboard.contact.wechat': 'Scan to Join Group',
-        'dashboard.contact.wechatDesc': 'Add WeChat for more technical support and communication',
-        'dashboard.contact.x': 'Follow on X.com',
-        'dashboard.contact.xDesc': 'Follow us on X for latest updates',
-        'dashboard.contact.sponsor': 'Scan to Support',
-        'dashboard.contact.sponsorDesc': 'Your support is the driving force for the project\'s continuous development',
-        'dashboard.contact.coffee': 'Buy me a coffee',
-        'dashboard.contact.coffeeDesc': 'If you like this project, buy me a coffee!',
-        
+
         // OAuth
         'oauth.modal.title': 'OAuth Authorization',
         'oauth.modal.provider': 'Provider:',
@@ -1552,11 +1506,13 @@ const translations = {
         'models.copiedCurl': 'Copied curl command',
         'models.clickToCopy': 'Click to copy',
         'models.clickToCopyCurl': 'Click to copy curl command',
+        'models.copyAsOpenAI': 'Copy as OpenAI format curl',
+        'models.copyAsClaude': 'Copy as Claude format curl',
 
         // Guide
         'guide.title': 'User Guide',
         'guide.intro.title': 'Introduction',
-        'guide.intro.desc': 'AIClient2API is an API proxy service that breaks client restrictions, converting free large models like Gemini, Antigravity, Qwen Code, and Kiro into standard OpenAI-compatible interfaces that any application can call.',
+        'guide.intro.desc': 'APIBridge is an API proxy service that breaks client restrictions, converting free large models like Gemini, Antigravity, Qwen Code, and Kiro into standard OpenAI-compatible interfaces that any application can call.',
         'guide.intro.feature1.title': 'Unified Access',
         'guide.intro.feature1.desc': 'Access multiple large models with a single configuration through standard OpenAI-compatible protocol',
         'guide.intro.feature2.title': 'Break Limits',
@@ -1720,7 +1676,7 @@ const translations = {
         'common.found': 'Found',
         'common.missing': 'Missing',
         'common.search': 'Search',
-        'common.welcome': 'Welcome to AIClient2API Management Console!',
+        'common.welcome': 'Welcome to APIBridge Management Console!',
         'common.fileType': 'Unsupported file type. Please select JSON, TXT, KEY, PEM, P12, or PFX.',
         'common.fileSize': 'File size cannot exceed 5MB.',
         'common.uploadSuccess': 'File uploaded successfully',
@@ -1734,7 +1690,7 @@ const translations = {
         'common.refresh.failed': 'Refresh failed',
         
         // Login
-        'login.title': 'Login - AIClient2API',
+        'login.title': 'Login - APIBridge',
         'login.heading': 'Please login to continue',
         'login.password': 'Password',
         'login.passwordPlaceholder': 'Please enter password',
@@ -1773,86 +1729,8 @@ export function setLanguage(lang) {
         currentLanguage = lang;
         localStorage.setItem('language', lang);
         updatePageLanguage();
-        // 更新图片
-        updateDashboardImages(lang);
         // 触发语言切换事件
         window.dispatchEvent(new CustomEvent('languageChanged', { detail: { language: lang } }));
-    }
-}
-
-// 更新仪表盘图片
-function updateDashboardImages(lang) {
-    const sponsorImg = document.getElementById('sponsor-img');
-    const sponsorTitle = document.getElementById('sponsor-title');
-    const sponsorDesc = document.getElementById('sponsor-desc');
-    
-    const wechatImg = document.getElementById('wechat-img');
-    const wechatIcon = document.getElementById('wechat-icon');
-    const wechatTitle = document.getElementById('wechat-title');
-    const wechatDesc = document.getElementById('wechat-desc');
-
-    if (lang === 'en-US') {
-        // 更新赞助图片
-        if (sponsorImg) {
-            sponsorImg.src = 'static/coffee.png';
-            sponsorImg.alt = 'Buy me a coffee';
-            if (sponsorTitle) {
-                sponsorTitle.setAttribute('data-i18n', 'dashboard.contact.coffee');
-                sponsorTitle.textContent = translations['en-US']['dashboard.contact.coffee'];
-            }
-            if (sponsorDesc) {
-                sponsorDesc.setAttribute('data-i18n', 'dashboard.contact.coffeeDesc');
-                sponsorDesc.textContent = translations['en-US']['dashboard.contact.coffeeDesc'];
-            }
-        }
-        
-        // 更新联系方式图片 (WeChat -> X.com)
-        if (wechatImg) {
-            wechatImg.src = 'static/x.com.png';
-            wechatImg.alt = 'X.com';
-            if (wechatIcon) {
-                wechatIcon.className = 'fab fa-x-twitter';
-            }
-            if (wechatTitle) {
-                wechatTitle.setAttribute('data-i18n', 'dashboard.contact.x');
-                wechatTitle.textContent = translations['en-US']['dashboard.contact.x'] || 'Follow on X.com';
-            }
-            if (wechatDesc) {
-                wechatDesc.setAttribute('data-i18n', 'dashboard.contact.xDesc');
-                wechatDesc.textContent = translations['en-US']['dashboard.contact.xDesc'] || 'Follow us on X for latest updates';
-            }
-        }
-    } else {
-        // 更新赞助图片
-        if (sponsorImg) {
-            sponsorImg.src = 'static/sponsor.png';
-            sponsorImg.alt = '赞助二维码';
-            if (sponsorTitle) {
-                sponsorTitle.setAttribute('data-i18n', 'dashboard.contact.sponsor');
-                sponsorTitle.textContent = translations['zh-CN']['dashboard.contact.sponsor'];
-            }
-            if (sponsorDesc) {
-                sponsorDesc.setAttribute('data-i18n', 'dashboard.contact.sponsorDesc');
-                sponsorDesc.textContent = translations['zh-CN']['dashboard.contact.sponsorDesc'];
-            }
-        }
-
-        // 更新联系方式图片 (X.com -> WeChat)
-        if (wechatImg) {
-            wechatImg.src = 'static/wechat.png';
-            wechatImg.alt = '微信二维码';
-            if (wechatIcon) {
-                wechatIcon.className = 'fab fa-weixin';
-            }
-            if (wechatTitle) {
-                wechatTitle.setAttribute('data-i18n', 'dashboard.contact.wechat');
-                wechatTitle.textContent = translations['zh-CN']['dashboard.contact.wechat'];
-            }
-            if (wechatDesc) {
-                wechatDesc.setAttribute('data-i18n', 'dashboard.contact.wechatDesc');
-                wechatDesc.textContent = translations['zh-CN']['dashboard.contact.wechatDesc'];
-            }
-        }
     }
 }
 
@@ -1913,9 +1791,7 @@ function updatePageLanguage() {
 export function initI18n() {
     // 设置初始语言
     updatePageLanguage();
-    // 设置初始图片
-    updateDashboardImages(currentLanguage);
-    
+
     // 监听 DOM 变化，自动翻译新添加的元素
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {

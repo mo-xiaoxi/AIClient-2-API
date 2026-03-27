@@ -78,7 +78,7 @@ async function getApiKey() {
 }
 
 /**
- * 生成完整的 curl 命令
+ * 生成 OpenAI 格式的 curl 命令
  * @param {string} modelName - 模型名称
  * @param {string} apiKey - API Key
  * @returns {string} curl 命令
@@ -91,6 +91,27 @@ function buildCurlCommand(modelName, apiKey) {
   -H "Authorization: Bearer ${bearer}" \\
   -d '{
     "model": "${modelName}",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'`;
+}
+
+/**
+ * 生成 Claude 格式的 curl 命令
+ * @param {string} modelName - 模型名称
+ * @param {string} apiKey - API Key
+ * @returns {string} curl 命令
+ */
+function buildClaudeCurlCommand(modelName, apiKey) {
+    const baseUrl = window.location.origin;
+    const key = apiKey || 'YOUR_API_KEY';
+    return `curl -X POST ${baseUrl}/v1/messages \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${key}" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -d '{
+    "model": "${modelName}",
+    "max_tokens": 1024,
     "messages": [{"role": "user", "content": "Hello"}],
     "stream": false
   }'`;
@@ -130,16 +151,18 @@ async function copyToClipboard(text) {
 /**
  * 显示复制成功的 Toast 提示
  * @param {string} modelName - 模型名称
+ * @param {string} [format] - 格式名称（OpenAI / Claude）
  */
-function showCopyToast(modelName) {
+function showCopyToast(modelName, format) {
     const toastContainer = document.getElementById('toastContainer');
     if (!toastContainer) return;
-    
+
+    const formatLabel = format ? ` (${format})` : '';
     const toast = document.createElement('div');
     toast.className = 'toast toast-success';
     toast.innerHTML = `
         <i class="fas fa-check-circle"></i>
-        <span>${t('models.copiedCurl') || '已复制 curl 命令'}: ${modelName}</span>
+        <span>${t('models.copiedCurl') || '已复制 curl 命令'}${formatLabel}: ${modelName}</span>
     `;
     
     toastContainer.appendChild(toast);
@@ -203,13 +226,18 @@ function renderModelsList(models) {
                 </div>
                 <div class="provider-models-content" id="models-${providerType}">
                     ${modelList.map(model => `
-                        <div class="model-item" onclick="window.copyModelName('${escapeHtml(model)}', this)" title="${t('models.clickToCopyCurl') || '点击复制 curl 命令'}">
+                        <div class="model-item">
                             <div class="model-item-icon">
                                 <i class="fas fa-cube"></i>
                             </div>
                             <span class="model-item-name">${escapeHtml(model)}</span>
-                            <div class="model-item-copy">
-                                <i class="fas fa-copy"></i>
+                            <div class="model-item-copy-buttons">
+                                <button class="model-copy-btn" onclick="window.copyModelAsOpenAI('${escapeHtml(model)}', this)" title="${t('models.copyAsOpenAI') || '复制为 OpenAI 格式 curl'}">
+                                    OpenAI
+                                </button>
+                                <button class="model-copy-btn model-copy-btn-claude" onclick="window.copyModelAsClaude('${escapeHtml(model)}', this)" title="${t('models.copyAsClaude') || '复制为 Claude 格式 curl'}">
+                                    Claude
+                                </button>
                             </div>
                         </div>
                     `).join('')}
@@ -319,24 +347,42 @@ function toggleProviderModels(providerType) {
 }
 
 /**
- * 复制模型的 curl 命令
+ * 复制模型的 OpenAI 格式 curl 命令
  * @param {string} modelName - 模型名称
- * @param {HTMLElement} element - 点击的元素
+ * @param {HTMLElement} btnElement - 点击的按钮元素
  */
-async function copyModelName(modelName, element) {
+async function copyModelAsOpenAI(modelName, btnElement) {
     const apiKey = await getApiKey();
     const curlCommand = buildCurlCommand(modelName, apiKey);
     const success = await copyToClipboard(curlCommand);
 
     if (success) {
-        // 添加复制成功的视觉反馈
-        element.classList.add('copied');
+        const modelItem = btnElement.closest('.model-item');
+        modelItem.classList.add('copied');
         setTimeout(() => {
-            element.classList.remove('copied');
+            modelItem.classList.remove('copied');
         }, 1000);
+        showCopyToast(modelName, 'OpenAI');
+    }
+}
 
-        // 显示 Toast 提示
-        showCopyToast(modelName);
+/**
+ * 复制模型的 Claude 格式 curl 命令
+ * @param {string} modelName - 模型名称
+ * @param {HTMLElement} btnElement - 点击的按钮元素
+ */
+async function copyModelAsClaude(modelName, btnElement) {
+    const apiKey = await getApiKey();
+    const curlCommand = buildClaudeCurlCommand(modelName, apiKey);
+    const success = await copyToClipboard(curlCommand);
+
+    if (success) {
+        const modelItem = btnElement.closest('.model-item');
+        modelItem.classList.add('copied');
+        setTimeout(() => {
+            modelItem.classList.remove('copied');
+        }, 1000);
+        showCopyToast(modelName, 'Claude');
     }
 }
 
@@ -370,7 +416,8 @@ async function refreshModels() {
 
 // 导出到全局作用域供 HTML 调用
 window.toggleProviderModels = toggleProviderModels;
-window.copyModelName = copyModelName;
+window.copyModelAsOpenAI = copyModelAsOpenAI;
+window.copyModelAsClaude = copyModelAsClaude;
 window.refreshModels = refreshModels;
 
 // 监听组件加载完成事件

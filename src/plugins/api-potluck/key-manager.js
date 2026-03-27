@@ -11,7 +11,7 @@ import crypto from 'crypto';
 
 // 配置文件路径
 const KEYS_STORE_FILE = path.join(process.cwd(), 'configs', 'api-potluck-keys.json');
-const KEY_PREFIX = 'maki_';
+const KEY_PREFIX = 'ab_';
 
 // 默认配置
 const DEFAULT_CONFIG = {

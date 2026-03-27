@@ -8,7 +8,7 @@ import { CONFIG } from '../core/config-manager.js';
 import { parseProxyUrl } from '../utils/proxy-utils.js';
 
 const execAsync = promisify(exec);
-const GITHUB_REPO = 'justlovemaki/AIClient-2-API';
+const GITHUB_REPO = 'mo-xiaoxi/APIBridge';
 
 function buildGitHubApiCandidates(repo) {
     const apiPath = `repos/${repo}/tags`;
@@ -162,7 +162,7 @@ async function getLatestVersionFromGitHub() {
             const response = await fetchWithProxy(candidate.url, {
                 headers: {
                     'Accept': 'application/vnd.github.v3+json',
-                    'User-Agent': 'AIClient2API-UpdateChecker'
+                    'User-Agent': 'APIBridge-UpdateChecker'
                 },
                 timeout: 10000
             });
@@ -433,7 +433,7 @@ async function performTarballUpdate(localVersion, latestTag) {
                 logger.info(`[Update] Request URL: ${candidate.url}`);
                 const response = await fetchWithProxy(candidate.url, {
                     headers: {
-                        'User-Agent': 'AIClient2API-Updater'
+                        'User-Agent': 'APIBridge-Updater'
                     },
                     redirect: 'follow'
                 });
@@ -465,7 +465,7 @@ async function performTarballUpdate(localVersion, latestTag) {
         // 4. 找到解压后的目录（格式通常是 repo-name-tag）
         const extractedItems = await fs.readdir(tempDir);
         const extractedDir = extractedItems.find(item =>
-            item.startsWith('AIClient-2-API-') || item.startsWith('AIClient2API-')
+            item.startsWith('APIBridge-') || item.startsWith('AIClient-2-API-') || item.startsWith('AIClient2API-')
         );
         
         if (!extractedDir) {

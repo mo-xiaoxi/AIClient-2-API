@@ -369,7 +369,7 @@
             <p class="subtitle">使用您的 API Key 登录查看用量</p>
             <div class="form-group">
                 <label>API Key</label>
-                <input type="text" class="form-input" id="apiKeyInput" placeholder="maki_xxxxxxxx..." autocomplete="off">
+                <input type="text" class="form-input" id="apiKeyInput" placeholder="ab_xxxxxxxx..." autocomplete="off">
             </div>
             <div class="form-group">
                 <label class="form-checkbox">
@@ -499,7 +499,7 @@
                 showToast('请输入 API Key', 'error');
                 return;
             }
-            if (!apiKey.startsWith('maki_')) {
+            if (!apiKey.startsWith('ab_')) {
                 showToast('API Key 格式不正确', 'error');
                 return;
             }
