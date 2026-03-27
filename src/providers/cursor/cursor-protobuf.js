@@ -12,6 +12,7 @@ import { create, fromBinary, fromJson, toBinary, toJson } from '@bufbuild/protob
 import { ValueSchema } from '@bufbuild/protobuf/wkt';
 
 import { frameConnectMessage } from './cursor-h2.js';
+import { fixToolCallArguments } from './cursor-tool-fixer.js';
 
 import {
     AgentClientMessageSchema,
@@ -433,12 +434,18 @@ function handleExecMessage(exec, mcpTools, sendFrame, onMcpExec) {
             }), sendFrame);
     } else if (c === 'mcpArgs') {
         const a = exec.message.value;
+        const toolName = a.toolName || a.name;
+        let decodedArgs = decodeMcpArgsMap(a.args);
+        // R7: Tool argument auto-repair (enabled by default, disable via CURSOR_TOOL_FIX_ENABLED=false)
+        if (process.env.CURSOR_TOOL_FIX_ENABLED !== 'false') {
+            decodedArgs = fixToolCallArguments(toolName, decodedArgs);
+        }
         onMcpExec({
             execId: exec.execId,
             execMsgId: exec.id,
             toolCallId: a.toolCallId || randomUUID(),
-            toolName: a.toolName || a.name,
-            decodedArgs: JSON.stringify(decodeMcpArgsMap(a.args)),
+            toolName,
+            decodedArgs: JSON.stringify(decodedArgs),
         });
     } else if (c === 'readArgs') {
         sendExec(exec, 'readResult', create(ReadResultSchema, {
