@@ -11,6 +11,9 @@ let modelsCache = null;
 // 提供商配置缓存
 let currentProviderConfigs = null;
 
+// API Key 缓存
+let cachedApiKey = null;
+
 /**
  * 更新提供商配置
  * @param {Array} configs - 提供商配置列表
@@ -49,6 +52,48 @@ async function fetchProviderModels() {
         console.error('[Models Manager] Failed to fetch provider models:', error);
         throw error;
     }
+}
+
+/**
+ * 获取 API Key（优先使用缓存）
+ * @returns {Promise<string>} API Key
+ */
+async function getApiKey() {
+    if (cachedApiKey) return cachedApiKey;
+    try {
+        const response = await fetch('/api/config', {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+            }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            cachedApiKey = data.REQUIRED_API_KEY || '';
+            return cachedApiKey;
+        }
+    } catch (e) {
+        console.error('[Models Manager] Failed to fetch API key:', e);
+    }
+    return '';
+}
+
+/**
+ * 生成完整的 curl 命令
+ * @param {string} modelName - 模型名称
+ * @param {string} apiKey - API Key
+ * @returns {string} curl 命令
+ */
+function buildCurlCommand(modelName, apiKey) {
+    const baseUrl = window.location.origin;
+    const bearer = apiKey || 'YOUR_API_KEY';
+    return `curl -X POST ${baseUrl}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${bearer}" \\
+  -d '{
+    "model": "${modelName}",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'`;
 }
 
 /**
@@ -94,7 +139,7 @@ function showCopyToast(modelName) {
     toast.className = 'toast toast-success';
     toast.innerHTML = `
         <i class="fas fa-check-circle"></i>
-        <span>${t('models.copied') || '已复制'}: ${modelName}</span>
+        <span>${t('models.copiedCurl') || '已复制 curl 命令'}: ${modelName}</span>
     `;
     
     toastContainer.appendChild(toast);
@@ -158,7 +203,7 @@ function renderModelsList(models) {
                 </div>
                 <div class="provider-models-content" id="models-${providerType}">
                     ${modelList.map(model => `
-                        <div class="model-item" onclick="window.copyModelName('${escapeHtml(model)}', this)" title="${t('models.clickToCopy') || '点击复制'}">
+                        <div class="model-item" onclick="window.copyModelName('${escapeHtml(model)}', this)" title="${t('models.clickToCopyCurl') || '点击复制 curl 命令'}">
                             <div class="model-item-icon">
                                 <i class="fas fa-cube"></i>
                             </div>
@@ -199,7 +244,13 @@ function getProviderDisplayName(providerType) {
         'openaiResponses-custom': 'OpenAI Responses Custom',
         'openai-qwen-oauth': 'Qwen (OAuth)',
         'openai-iflow': 'iFlow',
-        'openai-codex-oauth': 'OpenAI Codex (OAuth)'
+        'openai-codex-oauth': 'OpenAI Codex (OAuth)',
+        'cursor-oauth': 'Cursor (OAuth)',
+        'openai-copilot-oauth': 'Copilot (OAuth)',
+        'openai-codebuddy-oauth': 'CodeBuddy (OAuth)',
+        'openai-kimi-oauth': 'Kimi (OAuth)',
+        'openai-gitlab-oauth': 'GitLab (OAuth)',
+        'openai-kilo-oauth': 'Kilo (OAuth)'
     };
 
     return displayNames[providerType] || providerType;
@@ -224,6 +275,12 @@ function getProviderIcon(providerType) {
         return 'fas fa-gem';
     } else if (providerType.includes('claude')) {
         return 'fas fa-robot';
+    } else if (providerType.includes('cursor')) {
+        return 'fas fa-mouse-pointer';
+    } else if (providerType.includes('copilot')) {
+        return 'fas fa-code';
+    } else if (providerType.includes('grok')) {
+        return 'fas fa-brain';
     } else if (providerType.includes('openai') || providerType.includes('qwen') || providerType.includes('iflow')) {
         return 'fas fa-brain';
     }
@@ -262,20 +319,22 @@ function toggleProviderModels(providerType) {
 }
 
 /**
- * 复制模型名称
+ * 复制模型的 curl 命令
  * @param {string} modelName - 模型名称
  * @param {HTMLElement} element - 点击的元素
  */
 async function copyModelName(modelName, element) {
-    const success = await copyToClipboard(modelName);
-    
+    const apiKey = await getApiKey();
+    const curlCommand = buildCurlCommand(modelName, apiKey);
+    const success = await copyToClipboard(curlCommand);
+
     if (success) {
         // 添加复制成功的视觉反馈
         element.classList.add('copied');
         setTimeout(() => {
             element.classList.remove('copied');
         }, 1000);
-        
+
         // 显示 Toast 提示
         showCopyToast(modelName);
     }

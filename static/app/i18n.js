@@ -608,6 +608,7 @@ const translations = {
         'usage.empty': '点击"刷新用量"按钮获取授权文件用量信息',
         'usage.noData': '暂无用量数据',
         'usage.noInstances': '暂无已初始化的服务实例',
+        'usage.unsupported': '该提供商不支持用量查询',
         'usage.group.instances': '{count} 个实例',
         'usage.group.success': '{count}/{total} 成功',
         'usage.card.status.disabled': '已禁用',
@@ -673,7 +674,9 @@ const translations = {
         'models.empty': '暂无可用模型',
         'models.loadError': '加载模型列表失败',
         'models.copied': '已复制',
+        'models.copiedCurl': '已复制 curl 命令',
         'models.clickToCopy': '点击复制',
+        'models.clickToCopyCurl': '点击复制 curl 命令',
 
         // Guide
         'guide.title': '使用指南',
@@ -1480,6 +1483,7 @@ const translations = {
         'usage.empty': 'Click "Refresh Usage" button to get authorization file usage information',
         'usage.noData': 'No usage data available',
         'usage.noInstances': 'No initialized service instances',
+        'usage.unsupported': 'This provider does not support usage query',
         'usage.group.instances': '{count} instances',
         'usage.group.success': '{count}/{total} Success',
         'usage.card.status.disabled': 'Disabled',
@@ -1545,7 +1549,9 @@ const translations = {
         'models.empty': 'No models available',
         'models.loadError': 'Failed to load models',
         'models.copied': 'Copied',
+        'models.copiedCurl': 'Copied curl command',
         'models.clickToCopy': 'Click to copy',
+        'models.clickToCopyCurl': 'Click to copy curl command',
 
         // Guide
         'guide.title': 'User Guide',

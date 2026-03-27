@@ -9,7 +9,8 @@ import { t, getCurrentLanguage } from './i18n.js';
  * 这些提供商只显示模型名称和重置时间，不显示用量数字和进度条
  */
 const PROVIDERS_WITHOUT_USAGE_DISPLAY = [
-    'gemini-antigravity'
+    'gemini-antigravity',
+    'cursor-oauth'
 ];
 
 // 提供商配置缓存
@@ -585,6 +586,13 @@ function createInstanceUsageCard(instance, providerType) {
             <div class="usage-error-message">
                 <i class="fas fa-exclamation-triangle"></i>
                 <span>${instance.error}</span>
+            </div>
+        `;
+    } else if (instance.usage && instance.usage.unsupported) {
+        content.innerHTML = `
+            <div class="usage-error-message">
+                <i class="fas fa-info-circle"></i>
+                <span data-i18n="usage.unsupported">${t('usage.unsupported') || '该提供商不支持用量查询'}</span>
             </div>
         `;
     } else if (instance.usage) {
