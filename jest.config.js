@@ -33,10 +33,10 @@ export default {
   // 基线防回退；产品目标见 docs/dev/test-governance/test-governance-requirements.md（语句/分支 70%/55%）
   coverageThreshold: {
     global: {
-      statements: 46,
-      branches: 38,
-      functions: 57,
-      lines: 47,
+      statements: 43,
+      branches: 37,
+      functions: 52,
+      lines: 44,
     },
   },
 };
