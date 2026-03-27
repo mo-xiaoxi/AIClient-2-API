@@ -10,7 +10,7 @@
 
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
 
-const KEY_PREFIX_CONST = 'maki_';
+const KEY_PREFIX_CONST = 'ab_';
 
 // In-memory store shared across mock calls (simulates fs with no real files)
 let mockFileStore = null;
@@ -102,7 +102,7 @@ beforeEach(() => {
 // =============================================================================
 
 describe('KEY_PREFIX', () => {
-    test('equals maki_', () => {
+    test('equals ab_', () => {
         expect(KEY_PREFIX).toBe(KEY_PREFIX_CONST);
     });
 });
@@ -195,7 +195,7 @@ describe('listKeys()', () => {
 
 describe('getKey()', () => {
     test('returns null for non-existent key', async () => {
-        const result = await getKey('maki_doesnotexist');
+        const result = await getKey('ab_doesnotexist');
         expect(result).toBeNull();
     });
 
@@ -213,7 +213,7 @@ describe('getKey()', () => {
 
 describe('deleteKey()', () => {
     test('returns false for non-existent key', async () => {
-        const result = await deleteKey('maki_nonexistent');
+        const result = await deleteKey('ab_nonexistent');
         expect(result).toBe(false);
     });
 
@@ -232,7 +232,7 @@ describe('deleteKey()', () => {
 
 describe('updateKeyLimit()', () => {
     test('returns null for non-existent key', async () => {
-        const result = await updateKeyLimit('maki_ghost', 100);
+        const result = await updateKeyLimit('ab_ghost', 100);
         expect(result).toBeNull();
     });
 
@@ -250,7 +250,7 @@ describe('updateKeyLimit()', () => {
 
 describe('resetKeyUsage()', () => {
     test('returns null for non-existent key', async () => {
-        const result = await resetKeyUsage('maki_ghost');
+        const result = await resetKeyUsage('ab_ghost');
         expect(result).toBeNull();
     });
 
@@ -270,7 +270,7 @@ describe('resetKeyUsage()', () => {
 
 describe('toggleKey()', () => {
     test('returns null for non-existent key', async () => {
-        const result = await toggleKey('maki_ghost');
+        const result = await toggleKey('ab_ghost');
         expect(result).toBeNull();
     });
 
@@ -297,7 +297,7 @@ describe('toggleKey()', () => {
 
 describe('updateKeyName()', () => {
     test('returns null for non-existent key', async () => {
-        const result = await updateKeyName('maki_ghost', 'new-name');
+        const result = await updateKeyName('ab_ghost', 'new-name');
         expect(result).toBeNull();
     });
 
@@ -363,7 +363,7 @@ describe('validateKey()', () => {
 
 describe('incrementUsage()', () => {
     test('returns null for non-existent key', async () => {
-        const result = await incrementUsage('maki_doesnotexist');
+        const result = await incrementUsage('ab_doesnotexist');
         expect(result).toBeNull();
     });
 
@@ -493,7 +493,7 @@ describe('applyDailyLimitToAllKeys()', () => {
 
 describe('regenerateKey()', () => {
     test('returns null for non-existent key', async () => {
-        const result = await regenerateKey('maki_ghost123456');
+        const result = await regenerateKey('ab_ghost123456');
         expect(result).toBeNull();
     });
 
