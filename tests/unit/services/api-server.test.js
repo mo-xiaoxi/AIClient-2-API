@@ -97,8 +97,12 @@ beforeAll(async () => {
         });
         mockHttpServer.off = jest.fn().mockReturnValue(mockHttpServer);
 
-        return {
+        const httpMod = {
             createServer: jest.fn().mockReturnValue(mockHttpServer),
+        };
+        return {
+            ...httpMod,
+            default: httpMod,
         };
     });
 
@@ -151,6 +155,7 @@ beforeAll(async () => {
     // Mock url module
     await jest.unstable_mockModule('url', () => ({
         pathToFileURL: jest.fn((p) => ({ href: `file://${p}` })),
+        URL: globalThis.URL,
     }));
 
     // Mock converters registration
