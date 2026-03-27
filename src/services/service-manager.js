@@ -109,10 +109,18 @@ export async function autoLinkProviderConfigs(config, options = {}) {
         logger.info('[Auto-Link] No new configs to link');
     }
     
-    // Update provider pool manager if available
-    if (providerPoolManager) {
-        providerPoolManager.providerPools = config.providerPools;
-        providerPoolManager.initializeProviderStatus();
+    // Update provider pool manager, or create one if it doesn't exist yet
+    if (totalNewProviders > 0) {
+        const hasPoolData = config.providerPools && Object.values(config.providerPools).some(arr => arr.length > 0);
+        if (providerPoolManager) {
+            providerPoolManager.providerPools = config.providerPools;
+            providerPoolManager.initializeProviderStatus();
+        } else if (hasPoolData) {
+            // providerPoolManager 为 null（如单 provider 模式），但新凭据已添加到池中
+            // 需要重新初始化 providerPoolManager 以启用池模式
+            logger.info('[Auto-Link] Initializing ProviderPoolManager after new credential linked');
+            await initApiService(config);
+        }
     }
     return config.providerPools;
 }

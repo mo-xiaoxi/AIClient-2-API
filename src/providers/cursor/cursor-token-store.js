@@ -132,6 +132,15 @@ export class CursorTokenStore {
         this._cached = null;
         try {
             await fs.unlink(this.credFilePath);
+            // 尝试清理空的父目录（避免残留空目录）
+            try {
+                const dir = dirname(this.credFilePath);
+                const entries = await fs.readdir(dir);
+                if (entries.length === 0) {
+                    await fs.rmdir(dir);
+                    logger.info(`[CursorTokenStore] Removed empty directory: ${dir}`);
+                }
+            } catch {}
             logger.info('[CursorTokenStore] Tokens cleared.');
         } catch (err) {
             // File may not exist — that's fine

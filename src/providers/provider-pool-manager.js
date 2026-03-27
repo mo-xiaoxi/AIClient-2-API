@@ -809,6 +809,18 @@ export class ProviderPoolManager {
             p.config.isHealthy && !p.config.isDisabled && !p.config.needsRefresh
         );
 
+        // 排除已尝试过的 UUID（用于重试场景，避免选到同一个凭据）
+        if (options.excludeUuids && options.excludeUuids.length > 0) {
+            const excluded = new Set(options.excludeUuids);
+            const filtered = availableAndHealthyProviders.filter(p => !excluded.has(p.config.uuid));
+            if (filtered.length > 0) {
+                availableAndHealthyProviders = filtered;
+                this._log('debug', `Excluded ${options.excludeUuids.length} already-tried UUIDs, ${filtered.length} remaining`);
+            } else {
+                this._log('warn', `All healthy providers for ${providerType} have been tried, falling back to best available`);
+            }
+        }
+
         // 如果指定了模型，则排除不支持该模型的提供商
         if (requestedModel) {
             const modelFilteredProviders = availableAndHealthyProviders.filter(p => {

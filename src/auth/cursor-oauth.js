@@ -167,16 +167,22 @@ async function _startPolling(uuid, verifier) {
             if (response.status === 404) {
                 // Not yet authorized — continue polling
                 consecutiveErrors = 0;
+                // 每 10 次轮询输出一条进度日志
+                if ((attempt + 1) % 10 === 0) {
+                    logger.info(`[Cursor OAuth] Still polling... (attempt ${attempt + 1}/${POLL_MAX_ATTEMPTS})`);
+                }
                 delay = Math.min(delay * POLL_BACKOFF_MULTIPLIER, POLL_MAX_DELAY_MS);
                 continue;
             }
 
             if (response.ok) {
                 const data = await response.json();
+                logger.info(`[Cursor OAuth] Poll returned 200, response keys: ${Object.keys(data).join(', ')}`);
                 const accessToken = data.accessToken || data.access_token;
                 const refreshToken = data.refreshToken || data.refresh_token;
 
                 if (!accessToken || !refreshToken) {
+                    logger.error(`[Cursor OAuth] Poll response body (sanitized): ${JSON.stringify({ hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken, keys: Object.keys(data) })}`);
                     throw new Error('Poll response missing accessToken or refreshToken');
                 }
 
@@ -205,11 +211,12 @@ async function _startPolling(uuid, verifier) {
             }
 
             const errorBody = await response.text().catch(() => '');
+            logger.warn(`[Cursor OAuth] Poll returned unexpected status ${response.status}: ${errorBody}`);
             throw new Error(`Poll failed: ${response.status}${errorBody ? ` - ${errorBody}` : ''}`);
 
         } catch (err) {
             consecutiveErrors++;
-            logger.warn(`[Cursor OAuth] Polling error (attempt ${attempt + 1}): ${err.message}`);
+            logger.warn(`[Cursor OAuth] Polling error (attempt ${attempt + 1}/${POLL_MAX_ATTEMPTS}): ${err.message}`);
             if (consecutiveErrors >= 10) {
                 throw new Error(`Too many consecutive errors during Cursor auth polling (last: ${err.message})`);
             }

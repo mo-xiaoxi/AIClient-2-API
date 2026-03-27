@@ -319,13 +319,15 @@ export async function handleStreamRequest(res, service, model, requestBody, from
     let fullOldResponseJson = '';
     let responseClosed = false;
     let anyDataSent = retryContext?.anyDataSent || false; // 跟踪是否已向客户端发送过任何数据
-    
+
     // 重试上下文：包含 CONFIG 和重试计数
     // maxRetries: 凭证切换最大次数（跨凭证），默认 5 次
     const maxRetries = retryContext?.maxRetries ?? 5;
     const currentRetry = retryContext?.currentRetry ?? 0;
     const CONFIG = retryContext?.CONFIG;
     const isRetry = currentRetry > 0;
+    // 已尝试过的 UUID 列表，用于重试时排除，避免选到同一个凭据
+    const triedUuids = retryContext?.triedUuids ?? (pooluuid ? [pooluuid] : []);
     
     // 使用共享的 clientDisconnected 状态（如果是重试，继承上层的状态）
     let clientDisconnected = retryContext?.clientDisconnected || { value: false };
@@ -568,11 +570,16 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                 // 动态导入以避免循环依赖
                 const { getApiServiceWithFallback } = await import('../services/service-manager.js');
                 // 使用 acquireSlot: true 以占用新凭证的并发插槽
-                const result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: true });
-                
+                // 传入 excludeUuids 避免选到已失败的凭据
+                const result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: true, excludeUuids: triedUuids });
+
                 if (result && result.service) {
                     logger.info(`[Stream Retry] Switched to new credential: ${result.uuid} (provider: ${result.actualProviderType})`);
-                    
+
+                    // 如果选到的凭据与之前相同，说明没有其他可用凭据，跳过重试
+                    if (triedUuids.includes(result.uuid)) {
+                        logger.info(`[Stream Retry] Same credential selected (${result.uuid}), no alternative available. Stopping retry.`);
+                    } else {
                     // 使用新服务重试
                     const newRetryContext = {
                         ...retryContext,
@@ -580,9 +587,10 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                         currentRetry: currentRetry + 1,
                         maxRetries,
                         clientDisconnected,  // 传递断开状态
-                        anyDataSent          // 传递数据发送状态
+                        anyDataSent,         // 传递数据发送状态
+                        triedUuids: [...triedUuids, result.uuid]
                     };
-                    
+
                     // 递归调用，使用新的服务
                     return await handleStreamRequest(
                         res,
@@ -598,6 +606,7 @@ export async function handleStreamRequest(res, service, model, requestBody, from
                         result.serviceConfig?.customName || customName,
                         newRetryContext
                     );
+                    }
                 } else {
                     logger.info(`[Stream Retry] No healthy credential available for retry.`);
                 }
@@ -679,6 +688,8 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
     const maxRetries = retryContext?.maxRetries ?? 5;
     const currentRetry = retryContext?.currentRetry ?? 0;
     const CONFIG = retryContext?.CONFIG;
+    // 已尝试过的 UUID 列表，用于重试时排除，避免选到同一个凭据
+    const triedUuids = retryContext?.triedUuids ?? (pooluuid ? [pooluuid] : []);
     
     try{
         // The service returns the response in its native format (toProvider).
@@ -769,19 +780,25 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                 // 动态导入以避免循环依赖
                 const { getApiServiceWithFallback } = await import('../services/service-manager.js');
                 // 使用 acquireSlot: true 以占用新凭证的并发插槽
-                const result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: true });
-                
+                // 传入 excludeUuids 避免选到已失败的凭据
+                const result = await getApiServiceWithFallback(CONFIG, model, { acquireSlot: true, excludeUuids: triedUuids });
+
                 if (result && result.service) {
                     logger.info(`[Unary Retry] Switched to new credential: ${result.uuid} (provider: ${result.actualProviderType})`);
-                    
+
+                    // 如果选到的凭据与之前相同，说明没有其他可用凭据，跳过重试
+                    if (triedUuids.includes(result.uuid)) {
+                        logger.info(`[Unary Retry] Same credential selected (${result.uuid}), no alternative available. Stopping retry.`);
+                    } else {
                     // 使用新服务重试
                     const newRetryContext = {
                         ...retryContext,
                         CONFIG,
                         currentRetry: currentRetry + 1,
-                        maxRetries
+                        maxRetries,
+                        triedUuids: [...triedUuids, result.uuid]
                     };
-                    
+
                     // 递归调用，使用新的服务
                     return await handleUnaryRequest(
                         res,
@@ -797,6 +814,7 @@ export async function handleUnaryRequest(res, service, model, requestBody, fromP
                         result.serviceConfig?.customName || customName,
                         newRetryContext
                     );
+                    }
                 } else {
                     logger.info(`[Unary Retry] No healthy credential available for retry.`);
                 }
