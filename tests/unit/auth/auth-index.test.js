@@ -182,4 +182,9 @@ describe('auth/index.js 导出验证', () => {
         expect(authModule.refreshCursorToken).toBeDefined();
         expect(typeof authModule.refreshCursorToken).toBe('function');
     });
+
+    test('应导出 batchImportCursorTokensStream', () => {
+        expect(authModule.batchImportCursorTokensStream).toBeDefined();
+        expect(typeof authModule.batchImportCursorTokensStream).toBe('function');
+    });
 });

@@ -24,6 +24,12 @@ export class ProviderPoolManager {
         'openai-codex-oauth': 'gpt-5-codex-mini',
         'openaiResponses-custom': 'gpt-4o-mini',
         'forward-api': 'gpt-4o-mini',
+        'cursor-oauth': 'claude-sonnet-4',
+        'openai-copilot-oauth': 'gpt-4o',
+        'openai-codebuddy-oauth': 'GLM-4.7',
+        'openai-kimi-oauth': 'kimi-k2',
+        'openai-gitlab-oauth': 'gitlab-duo',
+        'openai-kilo-oauth': 'kilo/auto',
     };
 
     constructor(providerPools, options = {}) {

@@ -209,5 +209,33 @@
       "errorCount": 0,
       "lastErrorTime": null
     }
+  ],
+  "cursor-oauth": [
+    {
+      "customName": "Cursor OAuth节点1",
+      "CURSOR_OAUTH_CREDS_FILE_PATH": "configs/cursor/1711234567890_cursor-auth-token/1711234567890_cursor-auth-token.json",
+      "uuid": "c1d2e3f4-5678-9abc-def0-123456789abc",
+      "checkModelName": null,
+      "checkHealth": false,
+      "isHealthy": true,
+      "isDisabled": false,
+      "lastUsed": null,
+      "usageCount": 0,
+      "errorCount": 0,
+      "lastErrorTime": null
+    },
+    {
+      "customName": "Cursor OAuth节点2",
+      "CURSOR_OAUTH_CREDS_FILE_PATH": "configs/cursor/1711234567891_cursor-auth-token/1711234567891_cursor-auth-token.json",
+      "uuid": "d2e3f4a5-6789-abcd-ef01-23456789abcd",
+      "checkModelName": null,
+      "checkHealth": false,
+      "isHealthy": true,
+      "isDisabled": false,
+      "lastUsed": null,
+      "usageCount": 0,
+      "errorCount": 0,
+      "lastErrorTime": null
+    }
   ]
 }

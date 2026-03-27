@@ -509,9 +509,9 @@ async function handleGenerateAuthUrl(providerType) {
         return;
     }
 
-    // Cursor OAuth — direct PKCE polling flow, no extra dialog needed
+    // Cursor OAuth — show method selector (OAuth or batch import)
     if (providerType === 'cursor-oauth') {
-        await executeGenerateAuthUrl(providerType, {});
+        showCursorAuthMethodSelector(providerType);
         return;
     }
 
@@ -522,6 +522,364 @@ async function handleGenerateAuthUrl(providerType) {
  * 显示 Codex OAuth 认证方式选择对话框
  * @param {string} providerType - 提供商类型
  */
+function showCursorAuthMethodSelector(providerType) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-mouse-pointer"></i> <span data-i18n="oauth.cursor.selectMethod">${t('oauth.cursor.selectMethod')}</span></h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="auth-method-options" style="display: flex; flex-direction: column; gap: 12px;">
+                    <button class="auth-method-btn" data-method="oauth" style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; cursor: pointer; transition: all 0.2s;">
+                        <i class="fas fa-sign-in-alt" style="font-size: 24px; color: #6366f1;"></i>
+                        <div style="text-align: left;">
+                            <div style="font-weight: 600; color: #333;" data-i18n="oauth.cursor.oauth">${t('oauth.cursor.oauth')}</div>
+                            <div style="font-size: 12px; color: #666;" data-i18n="oauth.cursor.oauthDesc">${t('oauth.cursor.oauthDesc')}</div>
+                        </div>
+                    </button>
+                    <button class="auth-method-btn" data-method="batch-import" style="display: flex; align-items: center; gap: 12px; padding: 16px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; cursor: pointer; transition: all 0.2s;">
+                        <i class="fas fa-file-import" style="font-size: 24px; color: #10b981;"></i>
+                        <div style="text-align: left;">
+                            <div style="font-weight: 600; color: #333;" data-i18n="oauth.cursor.batchImport">${t('oauth.cursor.batchImport')}</div>
+                            <div style="font-size: 12px; color: #666;" data-i18n="oauth.cursor.batchImportDesc">${t('oauth.cursor.batchImportDesc')}</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-cancel" data-i18n="modal.provider.cancel">${t('modal.provider.cancel')}</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeBtn = modal.querySelector('.modal-close');
+    const cancelBtn = modal.querySelector('.modal-cancel');
+    [closeBtn, cancelBtn].forEach(btn => {
+        btn.addEventListener('click', () => {
+            modal.remove();
+        });
+    });
+
+    const methodBtns = modal.querySelectorAll('.auth-method-btn');
+    methodBtns.forEach(btn => {
+        btn.addEventListener('mouseenter', () => {
+            btn.style.borderColor = '#6366f1';
+            btn.style.background = '#f5f3ff';
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.borderColor = '#e0e0e0';
+            btn.style.background = 'white';
+        });
+        btn.addEventListener('click', async () => {
+            const method = btn.dataset.method;
+            modal.remove();
+
+            if (method === 'batch-import') {
+                showCursorBatchImportModal(providerType);
+            } else {
+                await executeGenerateAuthUrl(providerType, {});
+            }
+        });
+    });
+}
+
+/**
+ * 显示 Cursor 批量导入模态框
+ * @param {string} providerType - 提供商类型
+ */
+function showCursorBatchImportModal(providerType) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-import"></i> <span data-i18n="oauth.cursor.batchImport">${t('oauth.cursor.batchImport')}</span></h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="batch-import-instructions" style="margin-bottom: 16px; padding: 12px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px;">
+                    <p style="margin: 0; font-size: 14px; color: #4338ca;">
+                        <i class="fas fa-info-circle"></i>
+                        <span data-i18n="oauth.cursor.importInstructions">${t('oauth.cursor.importInstructions')}</span>
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label for="batchCursorTokens" style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">
+                        <span data-i18n="oauth.cursor.tokensLabel">${t('oauth.cursor.tokensLabel')}</span>
+                    </label>
+                    <textarea
+                        id="batchCursorTokens"
+                        rows="10"
+                        style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-family: monospace; font-size: 13px; resize: vertical;"
+                        placeholder='${t('oauth.cursor.tokensPlaceholder')}'
+                        data-i18n-placeholder="oauth.cursor.tokensPlaceholder"
+                    ></textarea>
+                </div>
+                <div class="form-group" style="margin-top: 12px; margin-bottom: 16px;">
+                    <details style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <summary style="padding: 12px; cursor: pointer; font-weight: 600; color: #374151; user-select: none;">
+                            <i class="fas fa-code" style="color: #6366f1; margin-right: 8px;"></i>
+                            <span data-i18n="oauth.cursor.jsonExample">${t('oauth.cursor.jsonExample')}</span>
+                        </summary>
+                        <div style="padding: 12px; background: #1f2937; border-radius: 0 0 8px 8px;">
+                            <div style="color: #a78bfa; font-family: monospace; font-size: 12px;">
+                                <div style="color: #9ca3af; margin-bottom: 8px;">// 单个凭据导入示例：</div>
+                                <pre style="margin: 0; white-space: pre; overflow-x: auto;">{
+  "access_token": "eyJhbG...",
+  "refresh_token": "eyJhbG...",
+  "expires_at": 1711234567890
+}</pre>
+                            </div>
+                            <div style="color: #a78bfa; font-family: monospace; font-size: 12px; margin-top: 16px;">
+                                <div style="color: #9ca3af; margin-bottom: 8px;">// 批量导入示例（JSON数组）：</div>
+                                <pre style="margin: 0; white-space: pre; overflow-x: auto;">[
+  {
+    "access_token": "token1...",
+    "refresh_token": "refresh1..."
+  },
+  {
+    "access_token": "token2...",
+    "refresh_token": "refresh2..."
+  }
+]</pre>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+                <div class="batch-import-stats" id="cursorBatchStats" style="display: none; margin-top: 12px; padding: 12px; background: #f3f4f6; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span data-i18n="oauth.cursor.tokenCount">${t('oauth.cursor.tokenCount')}</span>
+                        <span id="cursorTokenCountValue" style="font-weight: 600;">0</span>
+                    </div>
+                </div>
+                <div class="batch-import-progress" id="cursorBatchProgress" style="display: none; margin-top: 16px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <i class="fas fa-spinner fa-spin" style="color: #6366f1;"></i>
+                        <span data-i18n="oauth.cursor.importing">${t('oauth.cursor.importing')}</span>
+                    </div>
+                    <div class="progress-bar" style="margin-top: 8px; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden;">
+                        <div id="cursorImportProgressBar" style="height: 100%; width: 0%; background: #6366f1; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="batch-import-result" id="cursorBatchResult" style="display: none; margin-top: 16px; padding: 12px; border-radius: 8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-cancel" data-i18n="modal.provider.cancel">${t('modal.provider.cancel')}</button>
+                <button class="btn btn-primary batch-import-submit" id="cursorBatchSubmit">
+                    <i class="fas fa-upload"></i>
+                    <span data-i18n="oauth.cursor.startImport">${t('oauth.cursor.startImport')}</span>
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const textarea = modal.querySelector('#batchCursorTokens');
+    const statsDiv = modal.querySelector('#cursorBatchStats');
+    const tokenCountValue = modal.querySelector('#cursorTokenCountValue');
+    const progressDiv = modal.querySelector('#cursorBatchProgress');
+    const progressBar = modal.querySelector('#cursorImportProgressBar');
+    const resultDiv = modal.querySelector('#cursorBatchResult');
+    const submitBtn = modal.querySelector('#cursorBatchSubmit');
+    const closeBtn = modal.querySelector('.modal-close');
+    const cancelBtn = modal.querySelector('.modal-cancel');
+
+    // 实时统计 token 数量
+    textarea.addEventListener('input', () => {
+        try {
+            const val = textarea.value.trim();
+            if (!val) {
+                statsDiv.style.display = 'none';
+                return;
+            }
+            const data = JSON.parse(val);
+            const tokens = Array.isArray(data) ? data : [data];
+            statsDiv.style.display = 'block';
+            tokenCountValue.textContent = tokens.length;
+        } catch (e) {
+            statsDiv.style.display = 'none';
+        }
+    });
+
+    // 关闭按钮事件
+    [closeBtn, cancelBtn].forEach(btn => {
+        btn.addEventListener('click', () => {
+            modal.remove();
+        });
+    });
+
+    // 提交按钮事件
+    submitBtn.addEventListener('click', async () => {
+        let tokens = [];
+        try {
+            const val = textarea.value.trim();
+            const data = JSON.parse(val);
+            tokens = Array.isArray(data) ? data : [data];
+        } catch (e) {
+            showToast(t('common.error'), t('oauth.cursor.noTokens'), 'error');
+            return;
+        }
+
+        if (tokens.length === 0) {
+            showToast(t('common.warning'), t('oauth.cursor.noTokens'), 'warning');
+            return;
+        }
+
+        // 禁用输入和按钮
+        textarea.disabled = true;
+        submitBtn.disabled = true;
+        cancelBtn.disabled = true;
+        progressDiv.style.display = 'block';
+        resultDiv.style.display = 'none';
+        progressBar.style.width = '0%';
+
+        // 创建实时结果显示区域
+        resultDiv.style.cssText = 'display: block; margin-top: 16px; padding: 12px; border-radius: 8px; background: #f3f4f6; border: 1px solid #d1d5db;';
+        resultDiv.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <i class="fas fa-spinner fa-spin" style="color: #6366f1;"></i>
+                <strong id="cursorBatchProgressText">${t('oauth.cursor.importingProgress', { current: 0, total: tokens.length })}</strong>
+            </div>
+            <div id="cursorBatchResultsList" style="max-height: 200px; overflow-y: auto; font-size: 12px; margin-top: 8px;"></div>
+        `;
+
+        const progressText = resultDiv.querySelector('#cursorBatchProgressText');
+        const resultsList = resultDiv.querySelector('#cursorBatchResultsList');
+
+        let importSuccess = false;
+
+        try {
+            const response = await fetch('/api/cursor/batch-import-tokens', {
+                method: 'POST',
+                headers: window.apiClient ? window.apiClient.getAuthHeaders() : {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ tokens })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                let eventType = '';
+                let eventData = '';
+
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        eventType = line.substring(7).trim();
+                    } else if (line.startsWith('data: ')) {
+                        eventData = line.substring(6).trim();
+
+                        if (eventType && eventData) {
+                            try {
+                                const data = JSON.parse(eventData);
+
+                                if (eventType === 'progress') {
+                                    const { index, total, current } = data;
+                                    const percentage = Math.round((index / total) * 100);
+                                    progressBar.style.width = `${percentage}%`;
+                                    progressText.textContent = t('oauth.cursor.importingProgress', { current: index, total: total });
+
+                                    const resultItem = document.createElement('div');
+                                    resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
+                                    if (current.success) {
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                    } else if (current.error === 'duplicate') {
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>`;
+                                    } else {
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                    }
+                                    resultsList.appendChild(resultItem);
+                                    resultsList.scrollTop = resultsList.scrollHeight;
+                                } else if (eventType === 'complete') {
+                                    progressBar.style.width = '100%';
+                                    progressDiv.style.display = 'none';
+
+                                    const isAllSuccess = data.failedCount === 0;
+                                    const isAllFailed = data.successCount === 0;
+                                    let resultClass, resultIcon, resultMessage;
+
+                                    if (isAllSuccess) {
+                                        resultClass = 'background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;';
+                                        resultIcon = 'fa-check-circle';
+                                        resultMessage = t('oauth.cursor.importSuccess', { count: data.successCount });
+                                    } else if (isAllFailed) {
+                                        resultClass = 'background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;';
+                                        resultIcon = 'fa-times-circle';
+                                        resultMessage = t('oauth.cursor.importAllFailed', { count: data.failedCount });
+                                    } else {
+                                        resultClass = 'background: #fffbeb; border: 1px solid #fde68a; color: #92400e;';
+                                        resultIcon = 'fa-exclamation-triangle';
+                                        resultMessage = t('oauth.cursor.importPartial', { success: data.successCount, failed: data.failedCount });
+                                    }
+
+                                    resultDiv.style.cssText = `display: block; margin-top: 16px; padding: 12px; border-radius: 8px; ${resultClass}`;
+                                    const headerDiv = resultDiv.querySelector('div:first-child');
+                                    headerDiv.innerHTML = `<i class="fas ${resultIcon}"></i> <strong>${resultMessage}</strong>`;
+
+                                    if (data.successCount > 0) {
+                                        importSuccess = true;
+                                        loadProviders();
+                                        loadConfigList();
+                                    }
+                                } else if (eventType === 'error') {
+                                    throw new Error(data.error);
+                                }
+                            } catch (parseError) {
+                                console.warn('Failed to parse SSE data:', parseError);
+                            }
+                            eventType = '';
+                            eventData = '';
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('[Cursor Batch Import] Failed:', error);
+            progressDiv.style.display = 'none';
+            resultDiv.style.cssText = 'display: block; margin-top: 16px; padding: 12px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;';
+            resultDiv.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-times-circle"></i>
+                    <strong>${t('oauth.cursor.importError')}: ${error.message}</strong>
+                </div>
+            `;
+        } finally {
+            cancelBtn.disabled = false;
+
+            if (!importSuccess) {
+                textarea.disabled = false;
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<i class="fas fa-upload"></i> <span data-i18n="oauth.cursor.startImport">${t('oauth.cursor.startImport')}</span>`;
+            } else {
+                submitBtn.innerHTML = `<i class="fas fa-check-circle"></i> <span>${t('common.success')}</span>`;
+            }
+        }
+    });
+}
+
 function showCodexAuthMethodSelector(providerType) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -2529,7 +2887,9 @@ function getAuthFilePath(provider) {
         'gemini-antigravity': '~/.antigravity/oauth_creds.json',
         'openai-qwen-oauth': '~/.qwen/oauth_creds.json',
         'claude-kiro-oauth': '~/.aws/sso/cache/kiro-auth-token.json',
-        'openai-iflow': '~/.iflow/oauth_creds.json'
+        'openai-iflow': '~/.iflow/oauth_creds.json',
+        'cursor-oauth': 'configs/cursor/{timestamp}_cursor-auth-token.json',
+        'openai-codex-oauth': 'configs/codex/{timestamp}_codex-auth-token.json'
     };
     return authFilePaths[provider] || (getCurrentLanguage() === 'en-US' ? 'Unknown Path' : '未知路径');
 }
@@ -2550,6 +2910,7 @@ function showAuthModal(authUrl, authInfo) {
     // 获取需要开放的端口号（从 authInfo 或当前页面 URL）
     const requiredPort = authInfo.callbackPort || authInfo.port || window.location.port || '3000';
     const isDeviceFlow = authInfo.provider === 'openai-qwen-oauth' || (authInfo.provider === 'claude-kiro-oauth' && authInfo.authMethod === 'builder-id');
+    const isPollingFlow = authInfo.provider === 'cursor-oauth'; // PKCE polling — no callback port needed
 
     let instructionsHtml = '';
     if (authInfo.provider === 'openai-qwen-oauth') {
@@ -2591,6 +2952,18 @@ function showAuthModal(authUrl, authInfo) {
                 </ol>
             </div>
         `;
+    } else if (authInfo.provider === 'cursor-oauth') {
+        instructionsHtml = `
+            <div class="auth-instructions">
+                <h4 data-i18n="oauth.modal.steps">${t('oauth.modal.steps')}</h4>
+                <ol>
+                    <li data-i18n="oauth.cursor.step1">${t('oauth.cursor.step1')}</li>
+                    <li data-i18n="oauth.cursor.step2">${t('oauth.cursor.step2')}</li>
+                    <li data-i18n="oauth.cursor.step3">${t('oauth.cursor.step3')}</li>
+                    <li data-i18n="oauth.cursor.step4">${t('oauth.cursor.step4')}</li>
+                </ol>
+            </div>
+        `;
     } else {
         instructionsHtml = `
             <div class="auth-instructions">
@@ -2614,7 +2987,7 @@ function showAuthModal(authUrl, authInfo) {
             <div class="modal-body">
                 <div class="auth-info">
                     <p><strong data-i18n="oauth.modal.provider">${t('oauth.modal.provider')}</strong> ${authInfo.provider}</p>
-                    <div class="port-info-section" style="margin: 12px 0; padding: 12px; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; position: relative;">
+                    <div class="port-info-section" style="margin: 12px 0; padding: 12px; background: ${isPollingFlow ? '#eef2ff' : '#fef3c7'}; border: 1px solid ${isPollingFlow ? '#c7d2fe' : '#fcd34d'}; border-radius: 8px; position: relative;${isPollingFlow ? ' display: none;' : ''}">
                         ${(authInfo.provider === 'claude-kiro-oauth' && authInfo.authMethod === 'builder-id') ? `
                         <button class="regenerate-builder-id-btn" title="${t('common.generate')}" style="position: absolute; top: 12px; right: 12px; background: none; border: 1px solid #d97706; border-radius: 4px; cursor: pointer; color: #d97706; padding: 4px 8px;">
                             <i class="fas fa-sync-alt"></i>

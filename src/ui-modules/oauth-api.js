@@ -12,7 +12,12 @@ import {
     batchImportKiroRefreshTokensStream,
     importAwsCredentials,
     handleCursorOAuth,
+    batchImportCursorTokensStream,
     handleKiloOAuth,
+    handleKimiOAuth,
+    handleCopilotOAuth,
+    handleCodeBuddyOAuth,
+    handleGitLabOAuth,
 } from '../auth/oauth-handlers.js';
 
 /**
@@ -68,6 +73,24 @@ export async function handleGenerateAuthUrl(req, res, currentConfig, providerTyp
         } else if (providerType === 'openai-kilo-oauth') {
             // Kilo AI OAuth（Device Code Flow）
             const result = await handleKiloOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-kimi-oauth') {
+            const result = await handleKimiOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-copilot-oauth') {
+            // GitHub Copilot OAuth（Device Code Flow）
+            const result = await handleCopilotOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-codebuddy-oauth') {
+            const result = await handleCodeBuddyOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-gitlab-oauth') {
+            // GitLab Duo OAuth（PKCE / PAT）
+            const result = await handleGitLabOAuth(currentConfig, options);
             authUrl = result.authUrl;
             authInfo = result.authInfo;
         } else {
@@ -634,6 +657,90 @@ export async function handleImportAwsCredentials(req, res) {
             res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
             res.end();
         } else {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: error.message
+            }));
+        }
+        return true;
+    }
+}
+
+/**
+ * 批量导入 Cursor Token（带实时进度 SSE）
+ */
+export async function handleBatchImportCursorTokens(req, res) {
+    try {
+        const body = await getRequestBody(req);
+        const { tokens, skipDuplicateCheck } = body;
+
+        if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: 'tokens array is required and must not be empty'
+            }));
+            return true;
+        }
+
+        logger.info(`[Cursor Batch Import] Starting batch import with ${tokens.length} tokens...`);
+
+        // 设置 SSE 响应头
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        });
+
+        const sendSSE = (event, data) => {
+            if (!res.writableEnded && !res.destroyed) {
+                try {
+                    res.write(`event: ${event}\n`);
+                    res.write(`data: ${JSON.stringify(data)}\n\n`);
+                } catch (err) {
+                    logger.error('[Cursor Batch Import] Failed to write SSE:', err.message);
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        sendSSE('start', { total: tokens.length });
+
+        const result = await batchImportCursorTokensStream(
+            tokens,
+            (progress) => {
+                sendSSE('progress', progress);
+            },
+            skipDuplicateCheck !== false
+        );
+
+        logger.info(`[Cursor Batch Import] Completed: ${result.success} success, ${result.failed} failed`);
+
+        sendSSE('complete', {
+            success: true,
+            total: result.total,
+            successCount: result.success,
+            failedCount: result.failed,
+            details: result.details
+        });
+
+        res.end();
+        return true;
+
+    } catch (error) {
+        logger.error('[Cursor Batch Import] Error:', error);
+        if (res.headersSent && !res.writableEnded && !res.destroyed) {
+            try {
+                res.write(`event: error\n`);
+                res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+                res.end();
+            } catch (writeErr) {
+                logger.error('[Cursor Batch Import] Failed to write error:', writeErr.message);
+            }
+        } else if (!res.headersSent) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 success: false,

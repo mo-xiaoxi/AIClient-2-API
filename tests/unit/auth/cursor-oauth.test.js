@@ -10,6 +10,7 @@ import { jest, describe, test, expect, beforeEach, beforeAll, afterAll } from '@
 let generateCursorAuthParams;
 let refreshCursorToken;
 let handleCursorOAuth;
+let batchImportCursorTokensStream;
 
 beforeAll(async () => {
     await jest.unstable_mockModule('../../../src/utils/logger.js', () => ({
@@ -37,6 +38,7 @@ beforeAll(async () => {
     generateCursorAuthParams = mod.generateCursorAuthParams;
     refreshCursorToken = mod.refreshCursorToken;
     handleCursorOAuth = mod.handleCursorOAuth;
+    batchImportCursorTokensStream = mod.batchImportCursorTokensStream;
 });
 
 // ============================================================================
@@ -211,5 +213,72 @@ describe('handleCursorOAuth', () => {
         expect(result.authUrl).toBeDefined();
 
         await new Promise((r) => setTimeout(r, 200));
+    });
+});
+
+describe('batchImportCursorTokensStream', () => {
+    test('imports tokens and calls onProgress', async () => {
+        const tokens = [
+            { access_token: 'at1', refresh_token: 'rt1' },
+            { access_token: 'at2', refresh_token: 'rt2' },
+        ];
+        const progressCalls = [];
+        const onProgress = (p) => progressCalls.push(p);
+
+        const result = await batchImportCursorTokensStream(tokens, onProgress);
+
+        expect(result.total).toBe(2);
+        expect(result.success).toBe(2);
+        expect(result.failed).toBe(0);
+        expect(progressCalls).toHaveLength(2);
+        expect(progressCalls[0].index).toBe(1);
+        expect(progressCalls[1].index).toBe(2);
+        expect(progressCalls[0].current.success).toBe(true);
+        expect(progressCalls[0].current.path).toContain('configs/cursor/');
+    });
+
+    test('handles camelCase token fields', async () => {
+        const tokens = [{ accessToken: 'at1', refreshToken: 'rt1' }];
+        const result = await batchImportCursorTokensStream(tokens, () => {});
+
+        expect(result.success).toBe(1);
+        expect(result.failed).toBe(0);
+    });
+
+    test('fails when access_token is missing', async () => {
+        const tokens = [{ refresh_token: 'rt1' }];
+        const result = await batchImportCursorTokensStream(tokens, () => {});
+
+        expect(result.success).toBe(0);
+        expect(result.failed).toBe(1);
+        expect(result.details[0].error).toContain('Missing access_token or refresh_token');
+    });
+
+    test('fails when refresh_token is missing', async () => {
+        const tokens = [{ access_token: 'at1' }];
+        const result = await batchImportCursorTokensStream(tokens, () => {});
+
+        expect(result.success).toBe(0);
+        expect(result.failed).toBe(1);
+    });
+
+    test('works with empty progress callback', async () => {
+        const tokens = [{ access_token: 'at1', refresh_token: 'rt1' }];
+        const result = await batchImportCursorTokensStream(tokens, null);
+
+        expect(result.success).toBe(1);
+    });
+
+    test('handles mixed valid and invalid tokens', async () => {
+        const tokens = [
+            { access_token: 'at1', refresh_token: 'rt1' },
+            { refresh_token: 'rt2' }, // missing access_token
+            { access_token: 'at3', refresh_token: 'rt3' },
+        ];
+        const result = await batchImportCursorTokensStream(tokens, () => {});
+
+        expect(result.total).toBe(3);
+        expect(result.success).toBe(2);
+        expect(result.failed).toBe(1);
     });
 });

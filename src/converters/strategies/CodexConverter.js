@@ -15,7 +15,7 @@ import {
     generateContentPartDone,
     generateOutputItemDone,
     generateResponseCompleted
-} from '../../providers/openai/openai-responses-core.mjs';
+} from '../../providers/openai/openai-responses-stream.js';
 
 export class CodexConverter extends BaseConverter {
     constructor() {

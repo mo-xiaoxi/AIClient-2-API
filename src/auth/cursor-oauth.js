@@ -235,6 +235,109 @@ async function _saveTokenFile(tokens) {
     return relativePath;
 }
 
+/**
+ * Batch import Cursor tokens with streaming progress callback.
+ * Each token object must contain { access_token, refresh_token }.
+ *
+ * @param {Array<object>} tokens - Array of token objects
+ * @param {function} onProgress - Callback for progress updates
+ * @param {boolean} [skipDuplicateCheck=true]
+ * @returns {Promise<{ total: number, success: number, failed: number, details: Array }>}
+ */
+export async function batchImportCursorTokensStream(tokens, onProgress, skipDuplicateCheck = true) {
+    let successCount = 0;
+    let failedCount = 0;
+    const details = [];
+
+    // Read existing tokens for duplicate detection
+    let existingTokens = [];
+    if (!skipDuplicateCheck) {
+        try {
+            const cursorDir = path.join(process.cwd(), 'configs', 'cursor');
+            const entries = await fs.readdir(cursorDir, { withFileTypes: true }).catch(() => []);
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    const files = await fs.readdir(path.join(cursorDir, entry.name)).catch(() => []);
+                    for (const file of files) {
+                        if (file.endsWith('.json')) {
+                            try {
+                                const content = JSON.parse(
+                                    await fs.readFile(path.join(cursorDir, entry.name, file), 'utf8')
+                                );
+                                if (content.access_token) {
+                                    existingTokens.push(content.access_token);
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        const progressData = { index: i + 1, total: tokens.length, current: null };
+
+        try {
+            const accessToken = token.access_token || token.accessToken;
+            const refreshToken = token.refresh_token || token.refreshToken;
+
+            if (!accessToken || !refreshToken) {
+                throw new Error('Missing access_token or refresh_token');
+            }
+
+            // Duplicate check
+            if (!skipDuplicateCheck && existingTokens.includes(accessToken)) {
+                progressData.current = {
+                    index: i + 1,
+                    success: false,
+                    error: 'duplicate',
+                    existingPath: 'configs/cursor/'
+                };
+                failedCount++;
+                details.push(progressData.current);
+                onProgress?.({ ...progressData, successCount, failedCount });
+                continue;
+            }
+
+            const normalized = {
+                access_token: accessToken,
+                refresh_token: refreshToken,
+                expires_at: token.expires_at || getTokenExpiry(accessToken),
+            };
+
+            const relativePath = await _saveTokenFile(normalized);
+
+            await autoLinkProviderConfigs(CONFIG, {
+                onlyCurrentCred: true,
+                credPath: relativePath,
+            });
+
+            progressData.current = {
+                index: i + 1,
+                success: true,
+                path: relativePath,
+            };
+            successCount++;
+            existingTokens.push(accessToken);
+        } catch (err) {
+            logger.error(`[Cursor Batch Import] Token ${i + 1} failed:`, err.message);
+            progressData.current = {
+                index: i + 1,
+                success: false,
+                error: err.message,
+            };
+            failedCount++;
+        }
+
+        details.push(progressData.current);
+        onProgress?.({ ...progressData, successCount, failedCount });
+    }
+
+    return { total: tokens.length, success: successCount, failed: failedCount, details };
+}
+
 function _sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
