@@ -54,6 +54,7 @@ describe('preprocessImages — disabled (default)', () => {
 describe('preprocessImages — enabled (api mode)', () => {
     let preprocessImages;
     let mockFetch;
+    let originalFetch;
 
     beforeAll(async () => {
         process.env.CURSOR_VISION_ENABLED = 'true';
@@ -67,6 +68,7 @@ describe('preprocessImages — enabled (api mode)', () => {
             default: mockLogger,
         }));
 
+        originalFetch = global.fetch;
         mockFetch = jest.fn();
         global.fetch = mockFetch;
 
@@ -78,6 +80,7 @@ describe('preprocessImages — enabled (api mode)', () => {
         delete process.env.CURSOR_VISION_ENABLED;
         delete process.env.CURSOR_VISION_MODE;
         delete process.env.CURSOR_VISION_API_KEY;
+        global.fetch = originalFetch;
     });
 
     beforeEach(() => {

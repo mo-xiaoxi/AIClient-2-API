@@ -99,7 +99,13 @@ export async function preprocessImages(messages) {
  */
 function isSvg(url) {
     if (!url) return false;
-    return url.startsWith('data:image/svg') || url.endsWith('.svg');
+    if (url.startsWith('data:image/svg')) return true;
+    try {
+        const pathname = new URL(url, 'http://placeholder').pathname;
+        return pathname.toLowerCase().endsWith('.svg');
+    } catch {
+        return url.toLowerCase().endsWith('.svg');
+    }
 }
 
 /**
@@ -112,17 +118,19 @@ async function processWithLocalOCR(imageUrls) {
     const worker = await createWorker('eng+chi_sim');
     let combined = '';
 
-    for (let i = 0; i < imageUrls.length; i++) {
-        try {
-            const { data: { text } } = await worker.recognize(imageUrls[i]);
-            combined += `--- Image ${i + 1} OCR Text ---\n${text.trim() || '(No text detected in this image)'}\n\n`;
-        } catch (err) {
-            logger.error(`[CursorVision] OCR failed for image ${i + 1}: ${err.message}`);
-            combined += `--- Image ${i + 1} ---\n(Failed to parse image with local OCR)\n\n`;
+    try {
+        for (let i = 0; i < imageUrls.length; i++) {
+            try {
+                const { data: { text } } = await worker.recognize(imageUrls[i]);
+                combined += `--- Image ${i + 1} OCR Text ---\n${text.trim() || '(No text detected in this image)'}\n\n`;
+            } catch (err) {
+                logger.error(`[CursorVision] OCR failed for image ${i + 1}: ${err.message}`);
+                combined += `--- Image ${i + 1} ---\n(Failed to parse image with local OCR)\n\n`;
+            }
         }
+    } finally {
+        await worker.terminate();
     }
-
-    await worker.terminate();
     return combined;
 }
 
@@ -140,23 +148,31 @@ async function callVisionAPI(imageUrls) {
         parts.push({ type: 'image_url', image_url: { url } });
     }
 
-    const res = await fetch(VISION_API_BASE, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${VISION_API_KEY}`,
-        },
-        body: JSON.stringify({
-            model: VISION_API_MODEL,
-            messages: [{ role: 'user', content: parts }],
-            max_tokens: 1500,
-        }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
-    if (!res.ok) {
-        throw new Error(`Vision API returned status ${res.status}: ${await res.text()}`);
+    try {
+        const res = await fetch(VISION_API_BASE, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${VISION_API_KEY}`,
+            },
+            body: JSON.stringify({
+                model: VISION_API_MODEL,
+                messages: [{ role: 'user', content: parts }],
+                max_tokens: 1500,
+            }),
+            signal: controller.signal,
+        });
+
+        if (!res.ok) {
+            throw new Error(`Vision API returned status ${res.status}: ${await res.text()}`);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content || 'No description returned.';
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content || 'No description returned.';
 }

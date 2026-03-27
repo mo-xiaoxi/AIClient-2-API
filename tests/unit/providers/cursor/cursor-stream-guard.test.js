@@ -102,4 +102,21 @@ describe('createStreamGuard', () => {
             expect(guard.hasUnlocked()).toBe(false);
         });
     });
+
+    describe('finish() blocked state', () => {
+        test('returns empty string when stream never unlocked', () => {
+            const guard = createStreamGuard({ warmupChars: 100, guardChars: 50 });
+            guard.push('Hi'); // Too short to unlock
+            expect(guard.hasUnlocked()).toBe(false);
+            expect(guard.finish()).toBe('');
+        });
+
+        test('flushes remaining when unlocked', () => {
+            const guard = createStreamGuard({ warmupChars: 5, guardChars: 10 });
+            guard.push('Hello world, this is a test sentence.');
+            expect(guard.hasUnlocked()).toBe(true);
+            const flushed = guard.finish();
+            expect(flushed.length).toBeGreaterThan(0);
+        });
+    });
 });

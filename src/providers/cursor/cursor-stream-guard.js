@@ -80,6 +80,7 @@ export function createStreamGuard(options = {}) {
          * @returns {string}
          */
         finish() {
+            if (!unlocked) return ''; // Respect blocked state — don't leak blocked content
             if (!rawText) return '';
             if (rawText.length <= sentLength) return '';
             const delta = rawText.slice(sentLength);
