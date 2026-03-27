@@ -38,7 +38,8 @@ export {
 export {
     handleCursorOAuth,
     generateCursorAuthParams,
-    refreshCursorToken
+    refreshCursorToken,
+    batchImportCursorTokensStream
 } from './cursor-oauth.js';
 
 // Kimi OAuth

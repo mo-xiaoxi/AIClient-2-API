@@ -28,6 +28,7 @@ export {
     handleCursorOAuth,
     generateCursorAuthParams,
     refreshCursorToken,
+    batchImportCursorTokensStream,
     // Kilo OAuth
     handleKiloOAuth,
     refreshKiloToken,

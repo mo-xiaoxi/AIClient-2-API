@@ -32,6 +32,7 @@ const mockHandleCodexOAuth = jest.fn();
 const mockHandleCursorOAuth = jest.fn();
 const mockBatchImportGeminiTokensStream = jest.fn();
 const mockBatchImportCodexTokensStream = jest.fn();
+const mockBatchImportCursorTokensStream = jest.fn();
 const mockBatchImportKiroRefreshTokensStream = jest.fn();
 const mockImportAwsCredentials = jest.fn();
 
@@ -44,6 +45,7 @@ jest.unstable_mockModule('../../../src/auth/oauth-handlers.js', () => ({
     handleIFlowOAuth: mockHandleIFlowOAuth,
     handleCodexOAuth: mockHandleCodexOAuth,
     batchImportCodexTokensStream: mockBatchImportCodexTokensStream,
+    batchImportCursorTokensStream: mockBatchImportCursorTokensStream,
     batchImportKiroRefreshTokensStream: mockBatchImportKiroRefreshTokensStream,
     importAwsCredentials: mockImportAwsCredentials,
     handleCursorOAuth: mockHandleCursorOAuth,
@@ -58,6 +60,7 @@ let handleManualOAuthCallback;
 let handleBatchImportKiroTokens;
 let handleBatchImportGeminiTokens;
 let handleBatchImportCodexTokens;
+let handleBatchImportCursorTokens;
 let handleImportAwsCredentials;
 
 function createMockRes() {
@@ -78,6 +81,7 @@ beforeAll(async () => {
         handleBatchImportKiroTokens,
         handleBatchImportGeminiTokens,
         handleBatchImportCodexTokens,
+        handleBatchImportCursorTokens,
         handleImportAwsCredentials,
     } = await import('../../../src/ui-modules/oauth-api.js'));
 });

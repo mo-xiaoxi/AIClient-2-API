@@ -20,8 +20,9 @@
     "providerFallbackChain": {
       "gemini-cli-oauth": ["gemini-antigravity"],
       "gemini-antigravity": ["gemini-cli-oauth"],
-      "claude-kiro-oauth": ["claude-custom"],
-      "claude-custom": ["claude-kiro-oauth"]
+      "claude-kiro-oauth": ["claude-custom", "cursor-oauth"],
+      "claude-custom": ["claude-kiro-oauth"],
+      "cursor-oauth": ["claude-kiro-oauth", "claude-custom"]
     },
     "modelFallbackMapping": {
       "gemini-claude-opus-4-5-thinking": {
@@ -48,7 +49,8 @@
     "PROXY_URL": "http://127.0.0.1:1089",
     "PROXY_ENABLED_PROVIDERS": [
             "gemini-cli-oauth",
-            "gemini-antigravity"
+            "gemini-antigravity",
+            "cursor-oauth"
     ],
     "LOG_ENABLED": true,
     "LOG_OUTPUT_MODE": "all",
