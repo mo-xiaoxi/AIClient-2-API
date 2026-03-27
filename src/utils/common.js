@@ -6,6 +6,7 @@ import logger from './logger.js';
 import { convertData, getOpenAIStreamChunkStop } from '../convert/convert.js';
 import { ProviderStrategyFactory } from './provider-strategies.js';
 import { getPluginManager } from '../core/plugin-manager.js';
+import { processThinkingSuffix } from './thinking-config.js';
 
 // ==================== 网络错误处理 ====================
 
@@ -74,6 +75,11 @@ export const MODEL_PROVIDER = {
     FORWARD_API: 'forward-api',
     GROK_CUSTOM: 'grok-custom',
     CURSOR_OAUTH: 'cursor-oauth',
+    COPILOT_OAUTH: 'openai-copilot-oauth',
+    CODEBUDDY_OAUTH: 'openai-codebuddy-oauth',
+    KIMI_OAUTH: 'openai-kimi-oauth',
+    GITLAB_OAUTH: 'openai-gitlab-oauth',
+    KILO_OAUTH: 'openai-kilo-oauth',
     AUTO: 'auto',
 }
 
@@ -91,6 +97,15 @@ export function getProtocolPrefix(provider) {
 
     // Cursor OAuth uses OpenAI-compatible protocol — no format conversion needed
     if (provider === 'cursor-oauth') {
+        return 'openai';
+    }
+
+    // New providers — all OpenAI-compatible, no custom converter needed
+    if (provider === 'openai-copilot-oauth' ||
+        provider === 'openai-codebuddy-oauth' ||
+        provider === 'openai-kimi-oauth' ||
+        provider === 'openai-gitlab-oauth' ||
+        provider === 'openai-kilo-oauth') {
         return 'openai';
     }
 
@@ -915,6 +930,24 @@ export async function handleContentGenerationRequest(req, res, service, endpoint
     if (!model) {
         throw new Error("Could not determine the model from the request.");
     }
+
+    // 2.1. Per-model thinking configuration via model name suffix.
+    // e.g., "gpt-5.2(high)" → model="gpt-5.2", reasoning_effort="high"
+    const thinkingResult = processThinkingSuffix(model, originalRequestBody, getProtocolPrefix(fromProvider));
+    if (thinkingResult.applied) {
+        model = thinkingResult.model;
+        // Update model in request body so downstream sees the clean model name
+        if (originalRequestBody.model) {
+            originalRequestBody.model = model;
+        }
+    } else if (thinkingResult.model !== model) {
+        // Suffix was present but unknown format — still strip it
+        model = thinkingResult.model;
+        if (originalRequestBody.model) {
+            originalRequestBody.model = model;
+        }
+    }
+
     logger.info(`[Content Generation] Model: ${model}, Stream: ${isStream}`);
 
     let actualCustomName = CONFIG.customName;
