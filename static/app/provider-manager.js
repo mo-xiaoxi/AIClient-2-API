@@ -1158,16 +1158,16 @@ function showCodexBatchImportModal(providerType) {
                                     const percentage = Math.round((index / total) * 100);
                                     progressBar.style.width = `${percentage}%`;
                                     progressText.textContent = t('oauth.codex.importingProgress', { current: index, total: total });
-                                    
+
                                     const resultItem = document.createElement('div');
                                     resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                     if (current.success) {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                     } else if (current.error === 'duplicate') {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>
-                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateToken'))}</span>
+                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                     } else {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                     }
                                     resultsList.appendChild(resultItem);
                                     resultsList.scrollTop = resultsList.scrollHeight;
@@ -1622,16 +1622,16 @@ function showGeminiBatchImportModal(providerType) {
                                     const percentage = Math.round((index / total) * 100);
                                     progressBar.style.width = `${percentage}%`;
                                     progressText.textContent = t('oauth.gemini.importingProgress', { current: index, total: total });
-                                    
+
                                     const resultItem = document.createElement('div');
                                     resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                     if (current.success) {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                     } else if (current.error === 'duplicate') {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>
-                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateToken'))}</span>
+                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                     } else {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                     }
                                     resultsList.appendChild(resultItem);
                                     resultsList.scrollTop = resultsList.scrollHeight;
@@ -1890,14 +1890,14 @@ function showKiroBatchImportModal() {
                                     resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                     
                                     if (current.success) {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                     } else if (current.error === 'duplicate') {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>
-                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateToken'))}</span>
+                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                     } else {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                     }
-                                    
+
                                     resultsList.appendChild(resultItem);
                                     // 自动滚动到底部
                                     resultsList.scrollTop = resultsList.scrollHeight;
@@ -2702,12 +2702,12 @@ function showKiroAwsImportModal() {
                                         resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                         
                                         if (current.success) {
-                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                         } else if (current.error === 'duplicate') {
-                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateCredentials')}</span>
-                                                ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateCredentials'))}</span>
+                                                ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                         } else {
-                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                         }
                                         
                                         resultsList.appendChild(resultItem);

@@ -47,7 +47,7 @@ RUN chmod +x /app/tls-sidecar/tls-sidecar
 # 创建目录并设置权限
 RUN mkdir -p /app/logs /app/configs && \
     addgroup -S appgroup && adduser -S appuser -G appgroup && \
-    chown -R appuser:appgroup /app/logs /app/configs
+    chown -R appuser:appgroup /app
 
 USER appuser
 

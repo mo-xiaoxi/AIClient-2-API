@@ -17,6 +17,7 @@ import { MODEL_PROVIDER } from '../utils/common.js';
 
 // 存储 ProviderPoolManager 实例
 let providerPoolManager = null;
+let _isInitializingPoolManager = false;
 
 /**
  * 扫描 configs 目录并自动关联未关联的配置文件到对应的提供商
@@ -115,11 +116,16 @@ export async function autoLinkProviderConfigs(config, options = {}) {
         if (providerPoolManager) {
             providerPoolManager.providerPools = config.providerPools;
             providerPoolManager.initializeProviderStatus();
-        } else if (hasPoolData) {
+        } else if (hasPoolData && !_isInitializingPoolManager) {
             // providerPoolManager 为 null（如单 provider 模式），但新凭据已添加到池中
             // 需要重新初始化 providerPoolManager 以启用池模式
-            logger.info('[Auto-Link] Initializing ProviderPoolManager after new credential linked');
-            await initApiService(config);
+            _isInitializingPoolManager = true;
+            try {
+                logger.info('[Auto-Link] Initializing ProviderPoolManager after new credential linked');
+                await initApiService(config);
+            } finally {
+                _isInitializingPoolManager = false;
+            }
         }
     }
     return config.providerPools;

@@ -357,6 +357,10 @@ export async function performUpdate() {
     
     // 执行 checkout 到最新 tag
     try {
+        // 校验 tag 格式，防止命令注入
+        if (!/^v?\d+[\d.]*[-\w]*$/.test(latestTag)) {
+            throw new Error(`Invalid tag format: ${latestTag}`);
+        }
         logger.info(`[Update] Checking out to ${latestTag}...`);
         await execAsync(`git checkout ${latestTag}`);
     } catch (error) {
@@ -379,6 +383,9 @@ export async function performUpdate() {
     try {
         // 确保本地版本号有 v 前缀，以匹配 git tag 格式
         const localVersionTag = updateInfo.localVersion.startsWith('v') ? updateInfo.localVersion : `v${updateInfo.localVersion}`;
+        if (!/^v?\d+[\d.]*[-\w]*$/.test(localVersionTag)) {
+            throw new Error(`Invalid local version tag format: ${localVersionTag}`);
+        }
         const { stdout: diffOutput } = await execAsync(`git diff ${localVersionTag}..${latestTag} --name-only`);
         if (diffOutput.includes('package.json') || diffOutput.includes('package-lock.json')) {
             logger.info('[Update] package.json changed, running npm install...');
