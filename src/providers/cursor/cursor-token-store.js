@@ -9,6 +9,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import { dirname } from 'node:path';
 import logger from '../../utils/logger.js';
 
 // Forward reference — resolved lazily to avoid circular import
@@ -116,6 +117,7 @@ export class CursorTokenStore {
     async saveTokens(tokens) {
         this._cached = tokens;
         try {
+            await fs.mkdir(dirname(this.credFilePath), { recursive: true });
             await fs.writeFile(this.credFilePath, JSON.stringify(tokens, null, 2), 'utf8');
             logger.info('[CursorTokenStore] Tokens saved to disk.');
         } catch (err) {

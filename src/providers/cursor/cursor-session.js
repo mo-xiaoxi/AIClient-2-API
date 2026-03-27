@@ -165,6 +165,7 @@ function _doCleanup(session) {
         session.heartbeatTimer = null;
     }
     if (session.h2Stream) {
+        try { session.h2Stream.removeAllListeners(); } catch {}
         try { session.h2Stream.close(); } catch {}
     }
     if (session.h2Client) {
