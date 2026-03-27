@@ -34,7 +34,7 @@ import {
     generateContentPartDone,
     generateOutputItemDone,
     generateResponseCompleted
-} from '../../providers/openai/openai-responses-core.mjs';
+} from '../../providers/openai/openai-responses-stream.js';
 
 /**
  * OpenAI转换器类

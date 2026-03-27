@@ -14,6 +14,10 @@ import {
     handleCursorOAuth,
     batchImportCursorTokensStream,
     handleKiloOAuth,
+    handleKimiOAuth,
+    handleCopilotOAuth,
+    handleCodeBuddyOAuth,
+    handleGitLabOAuth,
 } from '../auth/oauth-handlers.js';
 
 /**
@@ -69,6 +73,24 @@ export async function handleGenerateAuthUrl(req, res, currentConfig, providerTyp
         } else if (providerType === 'openai-kilo-oauth') {
             // Kilo AI OAuth（Device Code Flow）
             const result = await handleKiloOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-kimi-oauth') {
+            const result = await handleKimiOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-copilot-oauth') {
+            // GitHub Copilot OAuth（Device Code Flow）
+            const result = await handleCopilotOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-codebuddy-oauth') {
+            const result = await handleCodeBuddyOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-gitlab-oauth') {
+            // GitLab Duo OAuth（PKCE / PAT）
+            const result = await handleGitLabOAuth(currentConfig, options);
             authUrl = result.authUrl;
             authInfo = result.authInfo;
         } else {

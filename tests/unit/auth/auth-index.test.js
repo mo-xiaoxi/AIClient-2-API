@@ -57,17 +57,19 @@ beforeAll(async () => {
         },
     }));
 
+    const fsMockPromises = {
+        mkdir: jest.fn().mockResolvedValue(undefined),
+        writeFile: jest.fn().mockResolvedValue(undefined),
+        readFile: jest.fn().mockResolvedValue('{}'),
+        readdir: jest.fn().mockResolvedValue([]),
+    };
     await jest.unstable_mockModule('fs', () => ({
         __esModule: true,
         default: {
             existsSync: jest.fn().mockReturnValue(false),
-            promises: {
-                mkdir: jest.fn().mockResolvedValue(undefined),
-                writeFile: jest.fn().mockResolvedValue(undefined),
-                readFile: jest.fn().mockResolvedValue('{}'),
-                readdir: jest.fn().mockResolvedValue([]),
-            },
+            promises: fsMockPromises,
         },
+        promises: fsMockPromises,
     }));
 
     authModule = await import('../../../src/auth/index.js');
@@ -173,5 +175,10 @@ describe('auth/index.js 导出验证', () => {
     test('应导出 refreshCursorToken', () => {
         expect(authModule.refreshCursorToken).toBeDefined();
         expect(typeof authModule.refreshCursorToken).toBe('function');
+    });
+
+    test('应导出 batchImportCursorTokensStream', () => {
+        expect(authModule.batchImportCursorTokensStream).toBeDefined();
+        expect(typeof authModule.batchImportCursorTokensStream).toBe('function');
     });
 });

@@ -24,7 +24,7 @@ import {
     generateContentPartDone,
     generateOutputItemDone,
     generateResponseCompleted
-} from '../../providers/openai/openai-responses-core.mjs';
+} from '../../providers/openai/openai-responses-stream.js';
 
 /**
  * 修复 Gemini 返回的工具参数名称问题

@@ -35,6 +35,11 @@ const mockBatchImportCodexTokensStream = jest.fn();
 const mockBatchImportCursorTokensStream = jest.fn();
 const mockBatchImportKiroRefreshTokensStream = jest.fn();
 const mockImportAwsCredentials = jest.fn();
+const mockHandleKiloOAuth = jest.fn();
+const mockHandleKimiOAuth = jest.fn();
+const mockHandleCopilotOAuth = jest.fn();
+const mockHandleCodeBuddyOAuth = jest.fn();
+const mockHandleGitLabOAuth = jest.fn();
 
 jest.unstable_mockModule('../../../src/auth/oauth-handlers.js', () => ({
     handleGeminiCliOAuth: mockHandleGeminiCliOAuth,
@@ -50,6 +55,11 @@ jest.unstable_mockModule('../../../src/auth/oauth-handlers.js', () => ({
     importAwsCredentials: mockImportAwsCredentials,
     handleCursorOAuth: mockHandleCursorOAuth,
     handleCodexOAuthCallback: jest.fn(),
+    handleKiloOAuth: mockHandleKiloOAuth,
+    handleKimiOAuth: mockHandleKimiOAuth,
+    handleCopilotOAuth: mockHandleCopilotOAuth,
+    handleCodeBuddyOAuth: mockHandleCodeBuddyOAuth,
+    handleGitLabOAuth: mockHandleGitLabOAuth,
 }));
 
 // ---------------------------------------------------------------------------
@@ -195,6 +205,70 @@ describe('handleGenerateAuthUrl', () => {
         await handleGenerateAuthUrl(req, res, {}, 'cursor-oauth');
 
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    });
+
+    test('generates auth URL for openai-kimi-oauth', async () => {
+        mockGetRequestBody.mockResolvedValue({});
+        mockHandleKimiOAuth.mockResolvedValue({
+            authUrl: 'https://kimi.example/auth',
+            authInfo: { device_code: 'abc' },
+        });
+        const req = {};
+        const res = createMockRes();
+
+        await handleGenerateAuthUrl(req, res, {}, 'openai-kimi-oauth');
+
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.authUrl).toBe('https://kimi.example/auth');
+    });
+
+    test('generates auth URL for openai-copilot-oauth', async () => {
+        mockGetRequestBody.mockResolvedValue({});
+        mockHandleCopilotOAuth.mockResolvedValue({
+            authUrl: 'https://github.com/login/device',
+            authInfo: { user_code: 'ABCD-1234' },
+        });
+        const req = {};
+        const res = createMockRes();
+
+        await handleGenerateAuthUrl(req, res, {}, 'openai-copilot-oauth');
+
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.authUrl).toBe('https://github.com/login/device');
+    });
+
+    test('generates auth URL for openai-codebuddy-oauth', async () => {
+        mockGetRequestBody.mockResolvedValue({});
+        mockHandleCodeBuddyOAuth.mockResolvedValue({
+            authUrl: 'https://codebuddy.example/auth',
+            authInfo: {},
+        });
+        const req = {};
+        const res = createMockRes();
+
+        await handleGenerateAuthUrl(req, res, {}, 'openai-codebuddy-oauth');
+
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.authUrl).toBe('https://codebuddy.example/auth');
+    });
+
+    test('generates auth URL for openai-gitlab-oauth', async () => {
+        mockGetRequestBody.mockResolvedValue({});
+        mockHandleGitLabOAuth.mockResolvedValue({
+            authUrl: 'https://gitlab.example/oauth/authorize',
+            authInfo: { state: 'xyz' },
+        });
+        const req = {};
+        const res = createMockRes();
+
+        await handleGenerateAuthUrl(req, res, {}, 'openai-gitlab-oauth');
+
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.authUrl).toBe('https://gitlab.example/oauth/authorize');
     });
 
     test('returns 500 when OAuth handler throws', async () => {
@@ -435,6 +509,63 @@ describe('handleBatchImportCodexTokens', () => {
         expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
             'Content-Type': 'text/event-stream',
         }));
+        expect(res.end).toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// handleBatchImportCursorTokens
+// ---------------------------------------------------------------------------
+describe('handleBatchImportCursorTokens', () => {
+    test('returns 400 when tokens is missing', async () => {
+        mockGetRequestBody.mockResolvedValue({});
+        const req = {};
+        const res = createMockRes();
+
+        await handleBatchImportCursorTokens(req, res);
+
+        expect(res.writeHead).toHaveBeenCalledWith(400, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.success).toBe(false);
+    });
+
+    test('returns 400 when tokens array is empty', async () => {
+        mockGetRequestBody.mockResolvedValue({ tokens: [] });
+        const req = {};
+        const res = createMockRes();
+
+        await handleBatchImportCursorTokens(req, res);
+
+        expect(res.writeHead).toHaveBeenCalledWith(400, expect.any(Object));
+    });
+
+    test('sends SSE events for successful batch import', async () => {
+        mockGetRequestBody.mockResolvedValue({ tokens: [{ access_token: 'at1', refresh_token: 'rt1' }] });
+        mockBatchImportCursorTokensStream.mockResolvedValue({
+            total: 1, success: 1, failed: 0, details: [],
+        });
+        const req = {};
+        const res = createMockRes();
+
+        await handleBatchImportCursorTokens(req, res);
+
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
+            'Content-Type': 'text/event-stream',
+        }));
+        expect(res.end).toHaveBeenCalled();
+    });
+
+    test('sends SSE error event when import throws after headers sent', async () => {
+        mockGetRequestBody.mockResolvedValue({ tokens: [{ access_token: 'at1', refresh_token: 'rt1' }] });
+        mockBatchImportCursorTokensStream.mockRejectedValue(new Error('import failed'));
+        const req = {};
+        const res = createMockRes();
+        // Simulate headers already sent
+        res.writeHead.mockImplementation(() => { res.headersSent = true; });
+
+        await handleBatchImportCursorTokens(req, res);
+
+        expect(res.write).toHaveBeenCalledWith('event: error\n');
         expect(res.end).toHaveBeenCalled();
     });
 });

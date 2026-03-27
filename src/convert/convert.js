@@ -19,7 +19,7 @@ import {
     generateContentPartDone,
     generateOutputItemDone,
     generateResponseCompleted
-} from '../providers/openai/openai-responses-core.mjs';
+} from '../providers/openai/openai-responses-stream.js';
 
 // =============================================================================
 // 初始化：注册所有转换器

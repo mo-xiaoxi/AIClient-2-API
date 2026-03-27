@@ -1,7 +1,7 @@
 export default {
   testEnvironment: 'node',
   transform: {
-    '^.+\\.(js|mjs)$': 'babel-jest',
+    '^.+\\.js$': 'babel-jest',
   },
   transformIgnorePatterns: [
     '/node_modules/(?!(uuid|@bufbuild)/)', // ESM modules that need to be transformed
@@ -20,7 +20,6 @@ export default {
     '!src/core/master.js',
     '!src/utils/tls-sidecar.js',
     '!src/scripts/**',
-    '!src/convert/convert-old.js',
     '!src/providers/cursor/proto/**',
   ],
   coverageDirectory: 'coverage',

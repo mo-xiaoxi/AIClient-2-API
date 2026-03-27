@@ -28,8 +28,8 @@ beforeAll(async () => {
         },
     }));
 
-    // Mock openai-responses-core.mjs helper generators
-    await jest.unstable_mockModule('../../../src/providers/openai/openai-responses-core.mjs', () => ({
+    // Mock openai-responses-stream.js helper generators
+    await jest.unstable_mockModule('../../../src/providers/openai/openai-responses-stream.js', () => ({
         generateResponseCreated: jest.fn((id, model) => ({ type: 'response.created', id, model })),
         generateResponseInProgress: jest.fn((id) => ({ type: 'response.in_progress', id })),
         generateOutputItemAdded: jest.fn((id) => ({ type: 'response.output_item.added', id })),
