@@ -6,13 +6,22 @@
  * the client sends back tool results (role='tool' messages).
  *
  * Session key: SHA256(model + firstUserMessage[:200]) — 16 hex chars
- * Session timeout: 120 seconds of inactivity (auto-cleanup)
+ * Session timeout: 600 seconds of inactivity by default (auto-cleanup).
+ *   Override via CURSOR_SESSION_TIMEOUT_MS environment variable.
  */
 
 import { createHash } from 'node:crypto';
 import logger from '../../utils/logger.js';
 
-const SESSION_TIMEOUT_MS = 120_000; // 120 seconds
+function getSessionTimeoutMs() {
+    const envVal = process.env.CURSOR_SESSION_TIMEOUT_MS;
+    if (envVal) {
+        const parsed = parseInt(envVal, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return 600_000; // 默认 10 分钟
+}
+const SESSION_TIMEOUT_MS = getSessionTimeoutMs();
 
 /**
  * @typedef {Object} CursorSession
@@ -48,7 +57,7 @@ export function deriveSessionKey(model, messages) {
 
 /**
  * Save a session, replacing any existing one for this key.
- * Starts the 120-second auto-expiry timer.
+ * Starts the auto-expiry timer (default 600 seconds, configurable via CURSOR_SESSION_TIMEOUT_MS).
  * @param {string} key
  * @param {CursorSession} session
  */

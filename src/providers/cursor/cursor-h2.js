@@ -67,6 +67,48 @@ export function parseConnectFrame(data) {
     }
 }
 
+// Connect Protocol error code → HTTP status code mapping
+export const CONNECT_ERROR_HTTP_MAP = {
+    'unauthenticated': 401,
+    'permission_denied': 403,
+    'not_found': 404,
+    'resource_exhausted': 429,
+    'invalid_argument': 400,
+    'failed_precondition': 400,
+    'unimplemented': 501,
+    'unavailable': 503,
+    'internal': 500,
+    'unknown': 502,
+    'canceled': 499,
+    'deadline_exceeded': 504,
+};
+
+/**
+ * Parse a Connect End Stream error frame with precise HTTP status mapping.
+ * @param {Uint8Array} data - the raw bytes after the 5-byte header
+ * @returns {{ error: Error, httpStatus: number }|null} - null if no error
+ */
+export function parseConnectErrorFrame(data) {
+    try {
+        const text = new TextDecoder().decode(data);
+        const p = JSON.parse(text);
+        if (p?.error) {
+            const code = p.error.code ?? 'unknown';
+            const message = p.error.message ?? 'Unknown error';
+            const detail = p.error.details?.[0]?.debug?.details?.detail || message;
+            const httpStatus = CONNECT_ERROR_HTTP_MAP[code] ?? 502;
+            const err = Object.assign(new Error(detail), { status: httpStatus, connectCode: code });
+            return { error: err, httpStatus };
+        }
+        return null;
+    } catch {
+        return {
+            error: Object.assign(new Error('Failed to parse Cursor API error response'), { status: 502 }),
+            httpStatus: 502,
+        };
+    }
+}
+
 /**
  * Execute a single unary HTTP/2 RPC request.
  * Sends bodyBytes and collects all response frames into a single Buffer.
