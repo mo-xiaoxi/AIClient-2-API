@@ -4,12 +4,16 @@
  */
 
 import { t } from './i18n.js';
+import { escapeHtml } from './utils.js';
 
 // 模型数据缓存
 let modelsCache = null;
 
 // 提供商配置缓存
 let currentProviderConfigs = null;
+
+// API Key 缓存
+let cachedApiKey = null;
 
 /**
  * 更新提供商配置
@@ -52,6 +56,69 @@ async function fetchProviderModels() {
 }
 
 /**
+ * 获取 API Key（优先使用缓存）
+ * @returns {Promise<string>} API Key
+ */
+async function getApiKey() {
+    if (cachedApiKey) return cachedApiKey;
+    try {
+        const response = await fetch('/api/config', {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+            }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            cachedApiKey = data.REQUIRED_API_KEY || '';
+            return cachedApiKey;
+        }
+    } catch (e) {
+        console.error('[Models Manager] Failed to fetch API key:', e);
+    }
+    return '';
+}
+
+/**
+ * 生成 OpenAI 格式的 curl 命令
+ * @param {string} modelName - 模型名称
+ * @param {string} apiKey - API Key
+ * @returns {string} curl 命令
+ */
+function buildCurlCommand(modelName, apiKey) {
+    const baseUrl = window.location.origin;
+    const bearer = apiKey || 'YOUR_API_KEY';
+    return `curl -X POST ${baseUrl}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${bearer}" \\
+  -d '{
+    "model": "${modelName}",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'`;
+}
+
+/**
+ * 生成 Claude 格式的 curl 命令
+ * @param {string} modelName - 模型名称
+ * @param {string} apiKey - API Key
+ * @returns {string} curl 命令
+ */
+function buildClaudeCurlCommand(modelName, apiKey) {
+    const baseUrl = window.location.origin;
+    const key = apiKey || 'YOUR_API_KEY';
+    return `curl -X POST ${baseUrl}/v1/messages \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${key}" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -d '{
+    "model": "${modelName}",
+    "max_tokens": 1024,
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }'`;
+}
+
+/**
  * 复制文本到剪贴板
  * @param {string} text - 要复制的文本
  * @returns {Promise<boolean>} 是否复制成功
@@ -85,16 +152,18 @@ async function copyToClipboard(text) {
 /**
  * 显示复制成功的 Toast 提示
  * @param {string} modelName - 模型名称
+ * @param {string} [format] - 格式名称（OpenAI / Claude）
  */
-function showCopyToast(modelName) {
+function showCopyToast(modelName, format) {
     const toastContainer = document.getElementById('toastContainer');
     if (!toastContainer) return;
-    
+
+    const formatLabel = format ? ` (${format})` : '';
     const toast = document.createElement('div');
     toast.className = 'toast toast-success';
     toast.innerHTML = `
         <i class="fas fa-check-circle"></i>
-        <span>${t('models.copied') || '已复制'}: ${modelName}</span>
+        <span>${escapeHtml(t('models.copiedCurl') || '已复制 curl 命令')}${escapeHtml(formatLabel)}: ${escapeHtml(modelName)}</span>
     `;
     
     toastContainer.appendChild(toast);
@@ -158,13 +227,18 @@ function renderModelsList(models) {
                 </div>
                 <div class="provider-models-content" id="models-${providerType}">
                     ${modelList.map(model => `
-                        <div class="model-item" onclick="window.copyModelName('${escapeHtml(model)}', this)" title="${t('models.clickToCopy') || '点击复制'}">
+                        <div class="model-item">
                             <div class="model-item-icon">
                                 <i class="fas fa-cube"></i>
                             </div>
                             <span class="model-item-name">${escapeHtml(model)}</span>
-                            <div class="model-item-copy">
-                                <i class="fas fa-copy"></i>
+                            <div class="model-item-copy-buttons">
+                                <button class="model-copy-btn" onclick="window.copyModelAsOpenAI('${escapeHtml(model)}', this)" title="${t('models.copyAsOpenAI') || '复制为 OpenAI 格式 curl'}">
+                                    OpenAI
+                                </button>
+                                <button class="model-copy-btn model-copy-btn-claude" onclick="window.copyModelAsClaude('${escapeHtml(model)}', this)" title="${t('models.copyAsClaude') || '复制为 Claude 格式 curl'}">
+                                    Claude
+                                </button>
                             </div>
                         </div>
                     `).join('')}
@@ -199,7 +273,13 @@ function getProviderDisplayName(providerType) {
         'openaiResponses-custom': 'OpenAI Responses Custom',
         'openai-qwen-oauth': 'Qwen (OAuth)',
         'openai-iflow': 'iFlow',
-        'openai-codex-oauth': 'OpenAI Codex (OAuth)'
+        'openai-codex-oauth': 'OpenAI Codex (OAuth)',
+        'cursor-oauth': 'Cursor (OAuth)',
+        'openai-copilot-oauth': 'Copilot (OAuth)',
+        'openai-codebuddy-oauth': 'CodeBuddy (OAuth)',
+        'openai-kimi-oauth': 'Kimi (OAuth)',
+        'openai-gitlab-oauth': 'GitLab (OAuth)',
+        'openai-kilo-oauth': 'Kilo (OAuth)'
     };
 
     return displayNames[providerType] || providerType;
@@ -224,22 +304,18 @@ function getProviderIcon(providerType) {
         return 'fas fa-gem';
     } else if (providerType.includes('claude')) {
         return 'fas fa-robot';
+    } else if (providerType.includes('cursor')) {
+        return 'fas fa-mouse-pointer';
+    } else if (providerType.includes('copilot')) {
+        return 'fas fa-code';
+    } else if (providerType.includes('grok')) {
+        return 'fas fa-brain';
     } else if (providerType.includes('openai') || providerType.includes('qwen') || providerType.includes('iflow')) {
         return 'fas fa-brain';
     }
     return 'fas fa-server';
 }
 
-/**
- * HTML 转义
- * @param {string} text - 原始文本
- * @returns {string} 转义后的文本
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 /**
  * 切换提供商模型列表的展开/折叠状态
@@ -262,22 +338,42 @@ function toggleProviderModels(providerType) {
 }
 
 /**
- * 复制模型名称
+ * 复制模型的 OpenAI 格式 curl 命令
  * @param {string} modelName - 模型名称
- * @param {HTMLElement} element - 点击的元素
+ * @param {HTMLElement} btnElement - 点击的按钮元素
  */
-async function copyModelName(modelName, element) {
-    const success = await copyToClipboard(modelName);
-    
+async function copyModelAsOpenAI(modelName, btnElement) {
+    const apiKey = await getApiKey();
+    const curlCommand = buildCurlCommand(modelName, apiKey);
+    const success = await copyToClipboard(curlCommand);
+
     if (success) {
-        // 添加复制成功的视觉反馈
-        element.classList.add('copied');
+        const modelItem = btnElement.closest('.model-item');
+        modelItem.classList.add('copied');
         setTimeout(() => {
-            element.classList.remove('copied');
+            modelItem.classList.remove('copied');
         }, 1000);
-        
-        // 显示 Toast 提示
-        showCopyToast(modelName);
+        showCopyToast(modelName, 'OpenAI');
+    }
+}
+
+/**
+ * 复制模型的 Claude 格式 curl 命令
+ * @param {string} modelName - 模型名称
+ * @param {HTMLElement} btnElement - 点击的按钮元素
+ */
+async function copyModelAsClaude(modelName, btnElement) {
+    const apiKey = await getApiKey();
+    const curlCommand = buildClaudeCurlCommand(modelName, apiKey);
+    const success = await copyToClipboard(curlCommand);
+
+    if (success) {
+        const modelItem = btnElement.closest('.model-item');
+        modelItem.classList.add('copied');
+        setTimeout(() => {
+            modelItem.classList.remove('copied');
+        }, 1000);
+        showCopyToast(modelName, 'Claude');
     }
 }
 
@@ -311,7 +407,8 @@ async function refreshModels() {
 
 // 导出到全局作用域供 HTML 调用
 window.toggleProviderModels = toggleProviderModels;
-window.copyModelName = copyModelName;
+window.copyModelAsOpenAI = copyModelAsOpenAI;
+window.copyModelAsClaude = copyModelAsClaude;
 window.refreshModels = refreshModels;
 
 // 监听组件加载完成事件

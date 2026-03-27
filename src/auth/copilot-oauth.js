@@ -148,7 +148,7 @@ async function fetchUserInfo(accessToken) {
         headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Accept': 'application/json',
-            'User-Agent': 'AIClient-2-API',
+            'User-Agent': 'APIBridge',
         },
     });
 

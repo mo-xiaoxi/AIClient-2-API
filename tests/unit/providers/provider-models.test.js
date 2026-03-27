@@ -70,8 +70,9 @@ describe('PROVIDER_MODELS data structure', () => {
         expect(PROVIDER_MODELS['forward-api']).toEqual([]);
     });
 
-    test('cursor-oauth has empty array (dynamic)', () => {
-        expect(PROVIDER_MODELS['cursor-oauth']).toEqual([]);
+    test('cursor-oauth has fallback models (dynamic provider)', () => {
+        expect(PROVIDER_MODELS['cursor-oauth'].length).toBeGreaterThan(0);
+        expect(PROVIDER_MODELS['cursor-oauth']).toContain('auto');
     });
 
     test('no duplicate models within a provider', () => {

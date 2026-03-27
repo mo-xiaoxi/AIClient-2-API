@@ -109,7 +109,16 @@ export const PROVIDER_MODELS = {
         'grok-imagine-1.0-video'
     ],
     // cursor-oauth: 模型列表通过 Cursor API 动态获取，静态列表仅作 fallback
-    'cursor-oauth': [],
+    'cursor-oauth': [
+        'auto',
+        'premium',
+        'composer-2',
+        'claude-4-sonnet',
+        'claude-3.5-sonnet',
+        'gpt-4o',
+        'cursor-small',
+        'gemini-2.5-pro',
+    ],
     'openai-codebuddy-oauth': [
         'GLM-5.0',
         'GLM-4.7',

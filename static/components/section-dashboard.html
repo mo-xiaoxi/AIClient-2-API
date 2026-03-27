@@ -2,8 +2,7 @@
 <!-- Dashboard Section -->
 <section id="dashboard" class="section active" aria-labelledby="dashboard-title">
     <h2 id="dashboard-title" data-i18n="dashboard.title">系统概览</h2>
-    <div class="dashboard-top-row">
-        <div class="stats-grid">
+    <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-icon">
                     <i class="fas fa-clock"></i>
@@ -14,40 +13,11 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Contact and Sponsor Section -->
-        <div class="contact-section dashboard-contact">
-            <div class="contact-grid">
-                <div class="contact-card">
-                    <h3><i id="wechat-icon" class="fab fa-weixin"></i> <span id="wechat-title" data-i18n="dashboard.contact.wechat">扫码进群，注明来意</span></h3>
-                    <div class="qr-container">
-                        <img src="static/wechat.png" id="wechat-img" alt="微信二维码" class="qr-code clickable-qr">
-                    </div>
-                    <p class="qr-description" id="wechat-desc" data-i18n="dashboard.contact.wechatDesc">添加微信获取更多技术支持和交流</p>
-                </div>
-                <div class="contact-card" id="sponsor-card">
-                    <h3><i class="fas fa-heart"></i> <span id="sponsor-title" data-i18n="dashboard.contact.sponsor">扫码赞助</span></h3>
-                    <div class="qr-container">
-                        <img src="static/sponsor.png" id="sponsor-img" alt="赞助二维码" class="qr-code clickable-qr">
-                    </div>
-                    <p class="qr-description" id="sponsor-desc" data-i18n="dashboard.contact.sponsorDesc">您的赞助是项目持续发展的动力</p>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- System Information Panel -->
     <div class="system-info-panel">
         <div class="system-info-header">
             <h3 data-i18n="dashboard.systemInfo">系统信息</h3>
-            <div class="update-controls">
-                <button id="checkUpdateBtn" class="btn btn-outline btn-sm" data-i18n-title="dashboard.update.checkTitle" title="检查更新">
-                    <i class="fas fa-sync-alt"></i> <span data-i18n="dashboard.update.check">检查更新</span>
-                </button>
-                <button id="performUpdateBtn" class="btn btn-primary btn-sm" style="display: none;" data-i18n-title="dashboard.update.performTitle" title="执行更新">
-                    <i class="fas fa-download"></i> <span data-i18n="dashboard.update.perform">立即更新</span>
-                </button>
-            </div>
         </div>
         <div class="info-grid">
             <div class="info-item">
@@ -56,9 +26,6 @@
                 </span>
                 <div class="version-display-wrapper">
                     <span class="info-value" id="appVersion">--</span>
-                    <span class="update-badge" id="updateBadge" style="display: none;">
-                        <i class="fas fa-arrow-up"></i> <span id="latestVersionText">--</span>
-                    </span>
                 </div>
             </div>
             <div class="info-item">

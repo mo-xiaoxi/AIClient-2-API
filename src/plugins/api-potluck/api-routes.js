@@ -365,7 +365,7 @@ export async function handlePotluckUserApiRoutes(method, path, req, res) {
             sendJson(res, 401, {
                 success: false,
                 error: {
-                    message: '需要 API Key。请在 Authorization 标头 (Bearer maki_xxx) 或 x-api-key 标头中提供您的 API Key。',
+                    message: '需要 API Key。请在 Authorization 标头 (Bearer ab_xxx) 或 x-api-key 标头中提供您的 API Key。',
                     code: 'API_KEY_REQUIRED'
                 }
             });

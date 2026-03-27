@@ -9,10 +9,10 @@ import logger from '../../utils/logger.js';
 /**
  * 从请求中提取 Potluck API Key
  * 支持多种认证方式：
- * 1. Authorization: Bearer maki_xxx
- * 2. x-api-key: maki_xxx
- * 3. x-goog-api-key: maki_xxx
- * 4. URL query: ?key=maki_xxx
+ * 1. Authorization: Bearer ab_xxx
+ * 2. x-api-key: ab_xxx
+ * 3. x-goog-api-key: ab_xxx
+ * 4. URL query: ?key=ab_xxx
  * 
  * @param {http.IncomingMessage} req - HTTP 请求对象
  * @param {URL} requestUrl - 解析后的 URL 对象

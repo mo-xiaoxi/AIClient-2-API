@@ -230,7 +230,17 @@ export async function handleBatchImportKiroTokens(req, res) {
             }));
             return true;
         }
-        
+
+        const MAX_BATCH_SIZE = 1000;
+        if (refreshTokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
+            }));
+            return true;
+        }
+
         logger.info(`[Kiro Batch Import] Starting batch import of ${refreshTokens.length} tokens with SSE...`);
         
         // 设置 SSE 响应头
@@ -320,9 +330,19 @@ export async function handleBatchImportGeminiTokens(req, res) {
             }));
             return true;
         }
-        
+
+        const MAX_BATCH_SIZE = 1000;
+        if (tokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
+            }));
+            return true;
+        }
+
         logger.info(`[Gemini Batch Import] Starting batch import for ${providerType} with ${tokens.length} tokens...`);
-        
+
         // 设置 SSE 响应头
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
@@ -330,11 +350,13 @@ export async function handleBatchImportGeminiTokens(req, res) {
             'Connection': 'keep-alive',
             'X-Accel-Buffering': 'no'
         });
-        
+
         // 发送 SSE 事件的辅助函数
         const sendSSE = (event, data) => {
-            res.write(`event: ${event}\n`);
-            res.write(`data: ${JSON.stringify(data)}\n\n`);
+            if (!res.writableEnded && !res.destroyed) {
+                res.write(`event: ${event}\n`);
+                res.write(`data: ${JSON.stringify(data)}\n\n`);
+            }
         };
         
         // 发送开始事件
@@ -398,6 +420,16 @@ export async function handleBatchImportCodexTokens(req, res) {
             return true;
         }
 
+        const MAX_BATCH_SIZE = 1000;
+        if (tokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
+            }));
+            return true;
+        }
+
         logger.info(`[Codex Batch Import] Starting batch import with ${tokens.length} tokens...`);
 
         // 设置 SSE 响应头
@@ -410,8 +442,10 @@ export async function handleBatchImportCodexTokens(req, res) {
 
         // 发送 SSE 事件的辅助函数
         const sendSSE = (event, data) => {
-            res.write(`event: ${event}\n`);
-            res.write(`data: ${JSON.stringify(data)}\n\n`);
+            if (!res.writableEnded && !res.destroyed) {
+                res.write(`event: ${event}\n`);
+                res.write(`data: ${JSON.stringify(data)}\n\n`);
+            }
         };
 
         // 发送开始事件
@@ -477,6 +511,15 @@ export async function handleImportAwsCredentials(req, res) {
         // 检查是否为批量导入（数组）
         if (Array.isArray(credentials)) {
             // 批量导入模式 - 使用 SSE 流式响应
+            const MAX_BATCH_SIZE = 1000;
+            if (credentials.length > MAX_BATCH_SIZE) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: false,
+                    error: `Too many credentials (max ${MAX_BATCH_SIZE})`
+                }));
+                return true;
+            }
             if (credentials.length === 0) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
@@ -516,7 +559,7 @@ export async function handleImportAwsCredentials(req, res) {
             }
             
             logger.info(`[Kiro AWS Batch Import] Starting batch import of ${credentials.length} credentials with SSE...`);
-            
+
             // 设置 SSE 响应头
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
@@ -524,11 +567,13 @@ export async function handleImportAwsCredentials(req, res) {
                 'Connection': 'keep-alive',
                 'X-Accel-Buffering': 'no'
             });
-            
+
             // 发送 SSE 事件的辅助函数
             const sendSSE = (event, data) => {
-                res.write(`event: ${event}\n`);
-                res.write(`data: ${JSON.stringify(data)}\n\n`);
+                if (!res.writableEnded && !res.destroyed) {
+                    res.write(`event: ${event}\n`);
+                    res.write(`data: ${JSON.stringify(data)}\n\n`);
+                }
             };
             
             // 发送开始事件
@@ -680,6 +725,16 @@ export async function handleBatchImportCursorTokens(req, res) {
             res.end(JSON.stringify({
                 success: false,
                 error: 'tokens array is required and must not be empty'
+            }));
+            return true;
+        }
+
+        const MAX_BATCH_SIZE = 1000;
+        if (tokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
             }));
             return true;
         }

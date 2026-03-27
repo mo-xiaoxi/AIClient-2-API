@@ -1,7 +1,7 @@
 // 提供商管理功能模块
 
 import { providerStats, updateProviderStats } from './constants.js';
-import { showToast, formatUptime, getProviderConfigs } from './utils.js';
+import { showToast, formatUptime, getProviderConfigs, escapeHtml } from './utils.js';
 import { fileUploadHandler } from './file-upload.js';
 import { t, getCurrentLanguage } from './i18n.js';
 import { renderRoutingExamples } from './routing-examples.js';
@@ -35,11 +35,6 @@ async function loadSystemInfo() {
 
         if (appVersionEl) appVersionEl.textContent = data.appVersion ? `v${data.appVersion}` : '--';
         
-        // 自动检查更新
-        if (data.appVersion) {
-            checkUpdate(true);
-        }
-
         if (nodeVersionEl) nodeVersionEl.textContent = data.nodeVersion || '--';
         if (memoryUsageEl) memoryUsageEl.textContent = data.memoryUsage || '--';
         if (cpuUsageEl) cpuUsageEl.textContent = data.cpuUsage || '--';
@@ -805,11 +800,11 @@ function showCursorBatchImportModal(providerType) {
                                     const resultItem = document.createElement('div');
                                     resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                     if (current.success) {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                     } else if (current.error === 'duplicate') {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateToken'))}</span>`;
                                     } else {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                     }
                                     resultsList.appendChild(resultItem);
                                     resultsList.scrollTop = resultsList.scrollHeight;
@@ -863,7 +858,7 @@ function showCursorBatchImportModal(providerType) {
             resultDiv.innerHTML = `
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-times-circle"></i>
-                    <strong>${t('oauth.cursor.importError')}: ${error.message}</strong>
+                    <strong>${escapeHtml(t('oauth.cursor.importError'))}: ${escapeHtml(error.message)}</strong>
                 </div>
             `;
         } finally {
@@ -1163,16 +1158,16 @@ function showCodexBatchImportModal(providerType) {
                                     const percentage = Math.round((index / total) * 100);
                                     progressBar.style.width = `${percentage}%`;
                                     progressText.textContent = t('oauth.codex.importingProgress', { current: index, total: total });
-                                    
+
                                     const resultItem = document.createElement('div');
                                     resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                     if (current.success) {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                     } else if (current.error === 'duplicate') {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>
-                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateToken'))}</span>
+                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                     } else {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                     }
                                     resultsList.appendChild(resultItem);
                                     resultsList.scrollTop = resultsList.scrollHeight;
@@ -1627,16 +1622,16 @@ function showGeminiBatchImportModal(providerType) {
                                     const percentage = Math.round((index / total) * 100);
                                     progressBar.style.width = `${percentage}%`;
                                     progressText.textContent = t('oauth.gemini.importingProgress', { current: index, total: total });
-                                    
+
                                     const resultItem = document.createElement('div');
                                     resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                     if (current.success) {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                     } else if (current.error === 'duplicate') {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>
-                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateToken'))}</span>
+                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                     } else {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                     }
                                     resultsList.appendChild(resultItem);
                                     resultsList.scrollTop = resultsList.scrollHeight;
@@ -1895,14 +1890,14 @@ function showKiroBatchImportModal() {
                                     resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                     
                                     if (current.success) {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                     } else if (current.error === 'duplicate') {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateToken')}</span>
-                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateToken'))}</span>
+                                            ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                     } else {
-                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                        resultItem.innerHTML = `Token ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                     }
-                                    
+
                                     resultsList.appendChild(resultItem);
                                     // 自动滚动到底部
                                     resultsList.scrollTop = resultsList.scrollHeight;
@@ -2707,12 +2702,12 @@ function showKiroAwsImportModal() {
                                         resultItem.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);';
                                         
                                         if (current.success) {
-                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #166534;">✓ ${current.path}</span>`;
+                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #166534;">✓ ${escapeHtml(current.path)}</span>`;
                                         } else if (current.error === 'duplicate') {
-                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #d97706;">⚠ ${t('oauth.kiro.duplicateCredentials')}</span>
-                                                ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${current.existingPath})</span>` : ''}`;
+                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #d97706;">⚠ ${escapeHtml(t('oauth.kiro.duplicateCredentials'))}</span>
+                                                ${current.existingPath ? `<span style="color: #666; font-size: 11px;">(${escapeHtml(current.existingPath)})</span>` : ''}`;
                                         } else {
-                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #991b1b;">✗ ${current.error}</span>`;
+                                            resultItem.innerHTML = `凭据 ${current.index}: <span style="color: #991b1b;">✗ ${escapeHtml(current.error)}</span>`;
                                         }
                                         
                                         resultsList.appendChild(resultItem);
@@ -3305,201 +3300,6 @@ function showAuthModal(authUrl, authInfo) {
     
 }
 
-/**
- * 显示需要重启的提示模态框
- * @param {string} version - 更新到的版本号
- */
-function showRestartRequiredModal(version) {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay restart-required-modal';
-    modal.style.display = 'flex';
-    
-    modal.innerHTML = `
-        <div class="modal-content restart-modal-content" style="max-width: 420px;">
-            <div class="modal-header restart-modal-header">
-                <h3><i class="fas fa-check-circle" style="color: #10b981;"></i> <span data-i18n="dashboard.update.restartTitle">${t('dashboard.update.restartTitle')}</span></h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body" style="text-align: center; padding: 20px;">
-                <p style="font-size: 1rem; color: #374151; margin: 0;" data-i18n="dashboard.update.restartMsg" data-i18n-params='{"version":"${version}"}'>${t('dashboard.update.restartMsg', { version })}</p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn restart-confirm-btn">
-                    <i class="fas fa-check"></i>
-                    <span data-i18n="common.confirm">${t('common.confirm')}</span>
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // 关闭按钮事件
-    const closeBtn = modal.querySelector('.modal-close');
-    const confirmBtn = modal.querySelector('.restart-confirm-btn');
-    
-    const closeModal = () => {
-        modal.remove();
-    };
-    
-    closeBtn.addEventListener('click', closeModal);
-    confirmBtn.addEventListener('click', closeModal);
-    
-    // 点击遮罩层关闭
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeModal();
-        }
-    });
-}
-
-/**
- * 检查更新
- * @param {boolean} silent - 是否静默检查（不显示 Toast）
- */
-async function checkUpdate(silent = false) {
-    const checkBtn = document.getElementById('checkUpdateBtn');
-    const updateBtn = document.getElementById('performUpdateBtn');
-    const updateBadge = document.getElementById('updateBadge');
-    const latestVersionText = document.getElementById('latestVersionText');
-    const checkBtnIcon = checkBtn?.querySelector('i');
-    const checkBtnText = checkBtn?.querySelector('span');
-
-    try {
-        if (!silent && checkBtn) {
-            checkBtn.disabled = true;
-            if (checkBtnIcon) checkBtnIcon.className = 'fas fa-spinner fa-spin';
-            if (checkBtnText) checkBtnText.textContent = t('dashboard.update.checking');
-        }
-
-        const data = await window.apiClient.get('/check-update');
-
-        if (data.hasUpdate) {
-            if (updateBtn) updateBtn.style.display = 'inline-flex';
-            if (updateBadge) updateBadge.style.display = 'inline-flex';
-            if (latestVersionText) latestVersionText.textContent = data.latestVersion;
-            
-            if (!silent) {
-                showToast(t('common.info'), t('dashboard.update.hasUpdate', { version: data.latestVersion }), 'info');
-            }
-        } else {
-            if (updateBtn) updateBtn.style.display = 'none';
-            if (updateBadge) updateBadge.style.display = 'none';
-            if (!silent) {
-                showToast(t('common.info'), t('dashboard.update.upToDate'), 'success');
-            }
-        }
-    } catch (error) {
-        console.error('Check update failed:', error);
-        if (!silent) {
-            showToast(t('common.error'), t('dashboard.update.failed', { error: error.message }), 'error');
-        }
-    } finally {
-        if (checkBtn) {
-            checkBtn.disabled = false;
-            if (checkBtnIcon) checkBtnIcon.className = 'fas fa-sync-alt';
-            if (checkBtnText) checkBtnText.textContent = t('dashboard.update.check');
-        }
-    }
-}
-
-/**
- * 执行更新
- */
-async function performUpdate() {
-    const updateBtn = document.getElementById('performUpdateBtn');
-    const latestVersionText = document.getElementById('latestVersionText');
-    const version = latestVersionText?.textContent || '';
-
-    if (!confirm(t('dashboard.update.confirmMsg', { version }))) {
-        return;
-    }
-
-    const updateBtnIcon = updateBtn?.querySelector('i');
-    const updateBtnText = updateBtn?.querySelector('span');
-
-    try {
-        if (updateBtn) {
-            updateBtn.disabled = true;
-            if (updateBtnIcon) updateBtnIcon.className = 'fas fa-spinner fa-spin';
-            if (updateBtnText) updateBtnText.textContent = t('dashboard.update.updating');
-        }
-
-        showToast(t('common.info'), t('dashboard.update.updating'), 'info');
-
-        const data = await window.apiClient.post('/update');
-
-        if (data.success) {
-            if (data.updated) {
-                // 代码已更新，直接调用重启服务
-                showToast(t('common.success'), t('dashboard.update.success'), 'success');
-                
-                // 自动重启服务
-                await restartServiceAfterUpdate();
-            } else {
-                // 已是最新版本
-                showToast(t('common.info'), t('dashboard.update.upToDate'), 'info');
-            }
-        }
-    } catch (error) {
-        console.error('Update failed:', error);
-        showToast(t('common.error'), t('dashboard.update.failed', { error: error.message }), 'error');
-    } finally {
-        if (updateBtn) {
-            updateBtn.disabled = false;
-            if (updateBtnIcon) updateBtnIcon.className = 'fas fa-download';
-            if (updateBtnText) updateBtnText.textContent = t('dashboard.update.perform');
-        }
-    }
-}
-
-/**
- * 更新后自动重启服务
- */
-async function restartServiceAfterUpdate() {
-    try {
-        showToast(t('common.info'), t('header.restart.requesting'), 'info');
-        
-        const token = localStorage.getItem('authToken');
-        const response = await fetch('/api/restart-service', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': token ? `Bearer ${token}` : ''
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok && result.success) {
-            showToast(t('common.success'), result.message || t('header.restart.success'), 'success');
-            
-            // 如果是 worker 模式，服务会自动重启，等待几秒后刷新页面
-            if (result.mode === 'worker') {
-                setTimeout(() => {
-                    showToast(t('common.info'), t('header.restart.reconnecting'), 'info');
-                    // 等待服务重启后刷新页面
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
-                }, 2000);
-            }
-        } else {
-            // 显示错误信息
-            const errorMsg = result.message || result.error?.message || t('header.restart.failed');
-            showToast(t('common.error'), errorMsg, 'error');
-            
-            // 如果是独立模式，显示提示
-            if (result.mode === 'standalone') {
-                showToast(t('common.info'), result.hint, 'warning');
-            }
-        }
-    } catch (error) {
-        console.error('Restart after update failed:', error);
-        showToast(t('common.error'), t('header.restart.failed') + ': ' + error.message, 'error');
-    }
-}
-
 export {
     loadSystemInfo,
     updateTimeDisplay,
@@ -3509,7 +3309,5 @@ export {
     openProviderManager,
     showAuthModal,
     executeGenerateAuthUrl,
-    handleGenerateAuthUrl,
-    checkUpdate,
-    performUpdate
+    handleGenerateAuthUrl
 };

@@ -6,7 +6,7 @@ import { readUsageCache, writeUsageCache, readProviderUsageCache, updateProvider
 import { PROVIDER_MAPPINGS } from '../utils/provider-utils.js';
 import path from 'path';
 
-const supportedProviders = ['claude-kiro-oauth', 'gemini-cli-oauth', 'gemini-antigravity', 'openai-codex-oauth', 'grok-custom'];
+const supportedProviders = ['claude-kiro-oauth', 'gemini-cli-oauth', 'gemini-antigravity', 'openai-codex-oauth', 'grok-custom', 'cursor-oauth'];
 
 
 /**
@@ -190,7 +190,12 @@ async function getAdapterUsage(adapter, providerType) {
         }
         throw new Error('This adapter does not support usage query');
     }
-    
+
+    if (providerType === 'cursor-oauth') {
+        // Cursor has no usage limits API — return empty structure with unsupported flag
+        return { usageBreakdown: [], unsupported: true };
+    }
+
     throw new Error(`Unsupported provider type: ${providerType}`);
 }
 

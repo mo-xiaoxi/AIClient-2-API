@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-i18n="login.title">登录 - AIClient2API</title>
+    <title data-i18n="login.title">登录 - APIBridge</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <style>
         * {
@@ -19,12 +19,14 @@
             align-items: center;
             justify-content: center;
             padding: 20px;
+            background: var(--bg-secondary);
         }
 
         .login-container {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            background: var(--bg-primary);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
             width: 100%;
             max-width: 400px;
             padding: 40px;
@@ -56,13 +58,13 @@
 
         .logo h1 {
             font-size: 24px;
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 5px;
         }
 
         .logo p {
             font-size: 14px;
-            color: #666;
+            color: var(--text-secondary);
         }
 
         .form-group {
@@ -72,7 +74,7 @@
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            color: #333;
+            color: var(--text-primary);
             font-size: 14px;
             font-weight: 500;
         }
@@ -80,24 +82,26 @@
         .form-group input {
             width: 100%;
             padding: 12px 15px;
-            border: 2px solid #e1e8ed;
-            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
             font-size: 14px;
             transition: all 0.3s ease;
             outline: none;
+            background: var(--bg-primary);
+            color: var(--text-primary);
         }
 
         .form-group input:focus {
-            border-color: #059669;
-            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-10);
         }
 
         .form-group input::placeholder {
-            color: #aaa;
+            color: var(--text-tertiary);
         }
 
         .error-message {
-            color: #e74c3c;
+            color: var(--danger-text);
             font-size: 13px;
             margin-top: 8px;
             display: none;
@@ -117,10 +121,10 @@
         .login-button {
             width: 100%;
             padding: 12px;
-            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
@@ -130,7 +134,7 @@
 
         .login-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(5, 150, 105, 0.4);
+            box-shadow: 0 5px 20px var(--primary-30);
         }
 
         .login-button:active {
@@ -138,7 +142,7 @@
         }
 
         .login-button:disabled {
-            background: #ccc;
+            background: var(--text-tertiary);
             cursor: not-allowed;
             transform: none;
         }
@@ -147,12 +151,12 @@
             text-align: center;
             margin-top: 30px;
             padding-top: 20px;
-            border-top: 1px solid #e1e8ed;
+            border-top: 1px solid var(--border-color);
         }
 
         .footer p {
             font-size: 13px;
-            color: #999;
+            color: var(--text-tertiary);
         }
 
         .loading {
@@ -189,7 +193,7 @@
     <div class="login-container">
         <div class="logo">
             <img src="/favicon.ico" alt="Logo" onerror="this.style.display='none'">
-            <h1>AIClient2API</h1>
+            <h1>APIBridge</h1>
             <p data-i18n="login.heading">请登录以继续</p>
         </div>
 
@@ -214,7 +218,7 @@
         </form>
 
         <div class="footer">
-            <p>&copy; 2077 AIClient2API. All rights reserved.</p>
+            <p>&copy; 2026 APIBridge. All rights reserved.</p>
         </div>
     </div>
 
