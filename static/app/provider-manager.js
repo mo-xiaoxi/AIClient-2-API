@@ -3300,54 +3300,6 @@ function showAuthModal(authUrl, authInfo) {
     
 }
 
-/**
- * 显示需要重启的提示模态框
- * @param {string} version - 更新到的版本号
- */
-function showRestartRequiredModal(version) {
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay restart-required-modal';
-    modal.style.display = 'flex';
-    
-    modal.innerHTML = `
-        <div class="modal-content restart-modal-content" style="max-width: 420px;">
-            <div class="modal-header restart-modal-header">
-                <h3><i class="fas fa-check-circle" style="color: #10b981;"></i> <span data-i18n="dashboard.update.restartTitle">${t('dashboard.update.restartTitle')}</span></h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body" style="text-align: center; padding: 20px;">
-                <p style="font-size: 1rem; color: #374151; margin: 0;" data-i18n="dashboard.update.restartMsg" data-i18n-params='{"version":"${version}"}'>${t('dashboard.update.restartMsg', { version })}</p>
-            </div>
-            <div class="modal-footer">
-                <button class="btn restart-confirm-btn">
-                    <i class="fas fa-check"></i>
-                    <span data-i18n="common.confirm">${t('common.confirm')}</span>
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // 关闭按钮事件
-    const closeBtn = modal.querySelector('.modal-close');
-    const confirmBtn = modal.querySelector('.restart-confirm-btn');
-    
-    const closeModal = () => {
-        modal.remove();
-    };
-    
-    closeBtn.addEventListener('click', closeModal);
-    confirmBtn.addEventListener('click', closeModal);
-    
-    // 点击遮罩层关闭
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeModal();
-        }
-    });
-}
-
 export {
     loadSystemInfo,
     updateTimeDisplay,

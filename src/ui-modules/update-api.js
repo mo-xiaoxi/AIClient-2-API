@@ -465,7 +465,7 @@ async function performTarballUpdate(localVersion, latestTag) {
         // 4. 找到解压后的目录（格式通常是 repo-name-tag）
         const extractedItems = await fs.readdir(tempDir);
         const extractedDir = extractedItems.find(item =>
-            item.startsWith('APIBridge-') || item.startsWith('AIClient-2-API-') || item.startsWith('AIClient2API-')
+            item.startsWith('APIBridge-')
         );
         
         if (!extractedDir) {
