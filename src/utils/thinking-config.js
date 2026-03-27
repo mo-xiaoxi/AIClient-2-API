@@ -41,6 +41,16 @@ const LEVEL_TO_BUDGET = {
     max: 65536,
 };
 
+// Map internal level names to OpenAI/Codex-compatible effort values (low|medium|high)
+const LEVEL_TO_EFFORT = {
+    minimal: 'low',
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    xhigh: 'high',
+    max: 'high',
+};
+
 // ============================================================================
 // Suffix Parsing
 // ============================================================================
@@ -170,8 +180,8 @@ function applyOpenAI(body, config) {
             body.reasoning_effort = 'high';
             break;
         case ThinkingMode.LEVEL:
-            // OpenAI supports: low, medium, high
-            body.reasoning_effort = config.level;
+            // OpenAI supports: low, medium, high — map internal levels
+            body.reasoning_effort = LEVEL_TO_EFFORT[config.level] || 'medium';
             break;
         case ThinkingMode.BUDGET:
             // Convert budget to reasoning_effort level
@@ -256,7 +266,8 @@ function applyCodex(body, config) {
             body.reasoning = { effort: 'high' };
             break;
         case ThinkingMode.LEVEL:
-            body.reasoning = { effort: config.level };
+            // Codex supports: low, medium, high — map internal levels
+            body.reasoning = { effort: LEVEL_TO_EFFORT[config.level] || 'medium' };
             break;
         case ThinkingMode.BUDGET:
             if (config.budget <= 4096) body.reasoning = { effort: 'low' };
@@ -306,4 +317,4 @@ export function processThinkingSuffix(model, requestBody, fromProtocol) {
     return { model: modelName, applied: true };
 }
 
-export { ThinkingMode, VALID_LEVELS, LEVEL_TO_BUDGET };
+export { ThinkingMode, VALID_LEVELS, LEVEL_TO_BUDGET, LEVEL_TO_EFFORT };

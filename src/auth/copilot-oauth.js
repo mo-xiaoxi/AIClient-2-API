@@ -219,7 +219,9 @@ async function saveCredentials(tokenData, userInfo) {
     const dirName = `${timestamp}_copilot-auth-token`;
     const targetDir = path.join(projectDir, 'configs', 'copilot', dirName);
 
-    await fs.promises.mkdir(targetDir, { recursive: true, mode: 0o700 });
+    await fs.promises.mkdir(targetDir, { recursive: true });
+    // Ensure restrictive permissions on credential directories
+    await fs.promises.chmod(targetDir, 0o700).catch(() => {});
 
     const fileName = `${userInfo.login}.json`;
     const credsPath = path.join(targetDir, fileName);

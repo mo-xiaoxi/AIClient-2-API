@@ -145,7 +145,7 @@ async function _saveTokenFile(tokens) {
 
     const fileName = `${folderName}.json`;
     const credPath = path.join(targetDir, fileName);
-    await fs.writeFile(credPath, JSON.stringify(tokens, null, 2), 'utf8');
+    await fs.writeFile(credPath, JSON.stringify(tokens, null, 2), { encoding: 'utf8', mode: 0o600 });
 
     const relativePath = path.relative(process.cwd(), credPath).replace(/\\/g, '/');
     logger.info(`[Kimi OAuth] Token file saved: ${relativePath}`);

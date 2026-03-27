@@ -90,11 +90,15 @@ function waitForCallback(port) {
 
             const errorParam = url.searchParams.get('error');
             if (errorParam) {
-                res.writeHead(400);
-                res.end(`GitLab OAuth error: ${errorParam}`);
+                // Sanitize error parameter to prevent XSS
+                const sanitized = String(errorParam).replace(/[<>"'&]/g, c => ({
+                    '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;'
+                })[c]);
+                res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end(`GitLab OAuth error: ${sanitized}`);
                 clearTimeout(timeout);
                 server.close();
-                reject(new Error(`GitLab OAuth error: ${errorParam}`));
+                reject(new Error(`GitLab OAuth error: ${sanitized}`));
                 return;
             }
 
@@ -306,7 +310,8 @@ async function saveCredentials(tokenData, userInfo, directAccess, oauthParams) {
         auth_kind: 'oauth',
         base_url: oauthParams.baseUrl,
         oauth_client_id: oauthParams.clientId,
-        oauth_client_secret: oauthParams.clientSecret || '',
+        // Omit client_secret from persisted credentials to avoid plaintext storage;
+        // refresh flow re-reads it from config when needed.
         oauth_expires_at: calculateExpiry(tokenData),
         username: userInfo.username,
         email: userInfo.email,
