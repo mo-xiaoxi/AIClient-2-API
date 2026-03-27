@@ -7,6 +7,7 @@ import { initializeAPIManagement } from './api-manager.js';
 import { createRequestHandler } from '../handlers/request-handler.js';
 import { discoverPlugins, getPluginManager } from '../core/plugin-manager.js';
 import { getTLSSidecar } from '../utils/tls-sidecar.js';
+import { createCodexWebSocketHandler } from '../providers/openai/codex-websocket.js';
 
 /**
  * @license
@@ -329,6 +330,18 @@ export async function startServer(options = {}) {
     // 设置服务器的最大连接数
     serverInstance.maxConnections = 1000;
 
+    // Setup Codex WebSocket relay on /v1/responses
+    try {
+        const { serviceInstances } = await import('../providers/adapter.js');
+        createCodexWebSocketHandler(serverInstance, CONFIG, () => {
+            // Find any initialized Codex adapter from the service instances
+            return Object.values(serviceInstances).find(s => s?.codexApiService);
+        });
+        logger.info('[WebSocket] Codex WebSocket relay enabled on /v1/responses');
+    } catch (err) {
+        logger.warn(`[WebSocket] Failed to initialize Codex WebSocket handler: ${err.message}`);
+    }
+
     const skipBrowserOpen = process.env.AICLIENT_TEST_SERVER === '1';
 
     await new Promise((resolve, reject) => {
@@ -363,6 +376,7 @@ export async function startServer(options = {}) {
         logger.info(`  • OpenAI-compatible: /v1/chat/completions, /v1/responses, /v1/models`);
         logger.info(`  • Gemini-compatible: /v1beta/models, /v1beta/models/{model}:generateContent`);
         logger.info(`  • Claude-compatible: /v1/messages`);
+        logger.info(`  • Codex WebSocket: ws://${CONFIG.HOST}:${listeningPort}/v1/responses`);
         logger.info(`  • Health check: /health`);
         logger.info(`  • UI Management Console: http://${CONFIG.HOST}:${listeningPort}/`);
 
