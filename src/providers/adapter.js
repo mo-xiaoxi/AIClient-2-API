@@ -10,6 +10,11 @@ import { CodexApiService } from './openai/codex-core.js';
 import { ForwardApiService } from './forward/forward-core.js';
 import { GrokApiService } from './grok/grok-core.js';
 import { CursorApiService } from './cursor/cursor-core.js';
+import { KimiApiService } from './kimi/kimi-core.js';
+import { CopilotApiService } from './copilot/copilot-core.js';
+import { CodeBuddyApiService } from './codebuddy/codebuddy-core.js';
+import { KiloApiService } from './kilo/kilo-core.js';
+import { GitLabApiService } from './gitlab/gitlab-core.js';
 import { MODEL_PROVIDER } from '../utils/common.js';
 import logger from '../utils/logger.js';
 
@@ -748,7 +753,299 @@ export class CursorApiServiceAdapter extends ApiServiceAdapter {
     }
 }
 
+// Kimi OAuth 服务适配器
+export class KimiApiServiceAdapter extends ApiServiceAdapter {
+    constructor(config) {
+        super();
+        this.kimiApiService = new KimiApiService(config);
+    }
+
+    async generateContent(model, requestBody) {
+        if (!this.kimiApiService.isInitialized) {
+            await this.kimiApiService.initialize();
+        }
+        return this.kimiApiService.generateContent(model, requestBody);
+    }
+
+    async *generateContentStream(model, requestBody) {
+        if (!this.kimiApiService.isInitialized) {
+            await this.kimiApiService.initialize();
+        }
+        yield* this.kimiApiService.generateContentStream(model, requestBody);
+    }
+
+    async listModels() {
+        if (!this.kimiApiService.isInitialized) {
+            await this.kimiApiService.initialize();
+        }
+        return this.kimiApiService.listModels();
+    }
+
+    async refreshToken() {
+        if (!this.kimiApiService.isInitialized) {
+            await this.kimiApiService.initialize();
+        }
+        if (this.isExpiryDateNear()) {
+            logger.info('[Kimi] Expiry date is near, refreshing token...');
+            return this.kimiApiService.refreshToken();
+        }
+        return Promise.resolve();
+    }
+
+    async forceRefreshToken() {
+        if (!this.kimiApiService.isInitialized) {
+            await this.kimiApiService.initialize();
+        }
+        return this.kimiApiService.forceRefreshToken();
+    }
+
+    isExpiryDateNear() {
+        return this.kimiApiService.isExpiryDateNear();
+    }
+
+    async getUsageLimits() {
+        return {};
+    }
+}
+
+// GitHub Copilot OAuth 服务适配器
+export class CopilotApiServiceAdapter extends ApiServiceAdapter {
+    constructor(config) {
+        super();
+        this.copilotApiService = new CopilotApiService(config);
+    }
+
+    async generateContent(model, requestBody) {
+        if (!this.copilotApiService.isInitialized) {
+            logger.warn('[CopilotApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.copilotApiService.initialize();
+        }
+        return this.copilotApiService.generateContent(model, requestBody);
+    }
+
+    async *generateContentStream(model, requestBody) {
+        if (!this.copilotApiService.isInitialized) {
+            logger.warn('[CopilotApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.copilotApiService.initialize();
+        }
+        yield* this.copilotApiService.generateContentStream(model, requestBody);
+    }
+
+    async listModels() {
+        if (!this.copilotApiService.isInitialized) {
+            logger.warn('[CopilotApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.copilotApiService.initialize();
+        }
+        return this.copilotApiService.listModels();
+    }
+
+    async refreshToken() {
+        if (!this.copilotApiService.isInitialized) {
+            await this.copilotApiService.initialize();
+        }
+        if (this.isExpiryDateNear()) {
+            logger.info('[Copilot] JWT near expiry, refreshing...');
+            return this.copilotApiService.refreshToken();
+        }
+        return Promise.resolve();
+    }
+
+    async forceRefreshToken() {
+        if (!this.copilotApiService.isInitialized) {
+            await this.copilotApiService.initialize();
+        }
+        logger.info('[Copilot] Force refreshing token...');
+        return this.copilotApiService.forceRefreshToken();
+    }
+
+    isExpiryDateNear() {
+        return this.copilotApiService.isExpiryDateNear();
+    }
+
+    async getUsageLimits() {
+        return {};
+    }
+}
+
+// CodeBuddy (Tencent) OAuth 服务适配器
+export class CodeBuddyApiServiceAdapter extends ApiServiceAdapter {
+    constructor(config) {
+        super();
+        this.codeBuddyApiService = new CodeBuddyApiService(config);
+    }
+
+    async generateContent(model, requestBody) {
+        if (!this.codeBuddyApiService.isInitialized) {
+            logger.warn('[CodeBuddyApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.codeBuddyApiService.initialize();
+        }
+        return this.codeBuddyApiService.generateContent(model, requestBody);
+    }
+
+    async *generateContentStream(model, requestBody) {
+        if (!this.codeBuddyApiService.isInitialized) {
+            logger.warn('[CodeBuddyApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.codeBuddyApiService.initialize();
+        }
+        yield* this.codeBuddyApiService.generateContentStream(model, requestBody);
+    }
+
+    async listModels() {
+        if (!this.codeBuddyApiService.isInitialized) {
+            logger.warn('[CodeBuddyApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.codeBuddyApiService.initialize();
+        }
+        return this.codeBuddyApiService.listModels();
+    }
+
+    async refreshToken() {
+        if (!this.codeBuddyApiService.isInitialized) {
+            await this.codeBuddyApiService.initialize();
+        }
+        if (this.isExpiryDateNear()) {
+            logger.info('[CodeBuddy] Token near expiry, refreshing...');
+            return this.codeBuddyApiService.refreshToken();
+        }
+        return Promise.resolve();
+    }
+
+    async forceRefreshToken() {
+        if (!this.codeBuddyApiService.isInitialized) {
+            await this.codeBuddyApiService.initialize();
+        }
+        logger.info('[CodeBuddy] Force refreshing token...');
+        return this.codeBuddyApiService.forceRefreshToken();
+    }
+
+    isExpiryDateNear() {
+        return this.codeBuddyApiService.isExpiryDateNear();
+    }
+
+    async getUsageLimits() {
+        return {};
+    }
+}
+
+// Kilo AI OAuth 服务适配器
+export class KiloApiServiceAdapter extends ApiServiceAdapter {
+    constructor(config) {
+        super();
+        this.kiloApiService = new KiloApiService(config);
+    }
+
+    async generateContent(model, requestBody) {
+        if (!this.kiloApiService.isInitialized) {
+            logger.warn('[KiloApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.kiloApiService.initialize();
+        }
+        return this.kiloApiService.generateContent(model, requestBody);
+    }
+
+    async *generateContentStream(model, requestBody) {
+        if (!this.kiloApiService.isInitialized) {
+            logger.warn('[KiloApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.kiloApiService.initialize();
+        }
+        yield* this.kiloApiService.generateContentStream(model, requestBody);
+    }
+
+    async listModels() {
+        if (!this.kiloApiService.isInitialized) {
+            logger.warn('[KiloApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.kiloApiService.initialize();
+        }
+        return this.kiloApiService.listModels();
+    }
+
+    async refreshToken() {
+        if (!this.kiloApiService.isInitialized) {
+            await this.kiloApiService.initialize();
+        }
+        return this.kiloApiService.refreshToken();
+    }
+
+    async forceRefreshToken() {
+        if (!this.kiloApiService.isInitialized) {
+            await this.kiloApiService.initialize();
+        }
+        logger.info('[Kilo] Force refreshing token...');
+        return this.kiloApiService.forceRefreshToken();
+    }
+
+    isExpiryDateNear() {
+        return this.kiloApiService.isExpiryDateNear();
+    }
+
+    async getUsageLimits() {
+        return {};
+    }
+}
+
+// GitLab Duo OAuth 服务适配器
+export class GitLabApiServiceAdapter extends ApiServiceAdapter {
+    constructor(config) {
+        super();
+        this.gitlabApiService = new GitLabApiService(config);
+    }
+
+    async generateContent(model, requestBody) {
+        if (!this.gitlabApiService.isInitialized) {
+            logger.warn('[GitLabApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.gitlabApiService.initialize();
+        }
+        return this.gitlabApiService.generateContent(model, requestBody);
+    }
+
+    async *generateContentStream(model, requestBody) {
+        if (!this.gitlabApiService.isInitialized) {
+            logger.warn('[GitLabApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.gitlabApiService.initialize();
+        }
+        yield* this.gitlabApiService.generateContentStream(model, requestBody);
+    }
+
+    async listModels() {
+        if (!this.gitlabApiService.isInitialized) {
+            logger.warn('[GitLabApiServiceAdapter] Not initialized, attempting to re-initialize...');
+            await this.gitlabApiService.initialize();
+        }
+        return this.gitlabApiService.listModels();
+    }
+
+    async refreshToken() {
+        if (!this.gitlabApiService.isInitialized) {
+            await this.gitlabApiService.initialize();
+        }
+        if (this.isExpiryDateNear()) {
+            logger.info('[GitLab] Token near expiry, refreshing...');
+            return this.gitlabApiService.refreshToken();
+        }
+        return Promise.resolve();
+    }
+
+    async forceRefreshToken() {
+        if (!this.gitlabApiService.isInitialized) {
+            await this.gitlabApiService.initialize();
+        }
+        logger.info('[GitLab] Force refreshing token...');
+        return this.gitlabApiService.forceRefreshToken();
+    }
+
+    isExpiryDateNear() {
+        return this.gitlabApiService.isExpiryDateNear();
+    }
+
+    async getUsageLimits() {
+        return {};
+    }
+}
+
 // 注册所有内置适配器
+registerAdapter(MODEL_PROVIDER.GITLAB_OAUTH, GitLabApiServiceAdapter);
+registerAdapter(MODEL_PROVIDER.KILO_OAUTH, KiloApiServiceAdapter);
+registerAdapter(MODEL_PROVIDER.CODEBUDDY_OAUTH, CodeBuddyApiServiceAdapter);
+registerAdapter(MODEL_PROVIDER.COPILOT_OAUTH, CopilotApiServiceAdapter);
+registerAdapter(MODEL_PROVIDER.KIMI_OAUTH, KimiApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.CURSOR_OAUTH, CursorApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM, OpenAIApiServiceAdapter);
 registerAdapter(MODEL_PROVIDER.OPENAI_CUSTOM_RESPONSES, OpenAIResponsesApiServiceAdapter);

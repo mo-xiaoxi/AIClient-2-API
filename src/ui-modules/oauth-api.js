@@ -12,6 +12,7 @@ import {
     batchImportKiroRefreshTokensStream,
     importAwsCredentials,
     handleCursorOAuth,
+    handleKiloOAuth,
 } from '../auth/oauth-handlers.js';
 
 /**
@@ -62,6 +63,11 @@ export async function handleGenerateAuthUrl(req, res, currentConfig, providerTyp
         } else if (providerType === 'cursor-oauth') {
             // Cursor OAuth（PKCE + polling）
             const result = await handleCursorOAuth(currentConfig, options);
+            authUrl = result.authUrl;
+            authInfo = result.authInfo;
+        } else if (providerType === 'openai-kilo-oauth') {
+            // Kilo AI OAuth（Device Code Flow）
+            const result = await handleKiloOAuth(currentConfig, options);
             authUrl = result.authUrl;
             authInfo = result.authInfo;
         } else {

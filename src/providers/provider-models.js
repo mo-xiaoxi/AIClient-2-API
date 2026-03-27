@@ -109,7 +109,37 @@ export const PROVIDER_MODELS = {
         'grok-imagine-1.0-video'
     ],
     // cursor-oauth: 模型列表通过 Cursor API 动态获取，静态列表仅作 fallback
-    'cursor-oauth': []
+    'cursor-oauth': [],
+    'openai-codebuddy-oauth': [
+        'GLM-5.0',
+        'GLM-4.7',
+        'MiniMax-M2.5',
+        'Kimi-K2.5',
+        'DeepSeek-V3.2',
+    ],
+    // copilot-oauth: 模型列表通过 Copilot API 动态获取，静态列表仅作 fallback
+    'openai-copilot-oauth': [
+        'gpt-4o',
+        'gpt-4.1',
+        'o4-mini',
+        'claude-sonnet-4',
+        'gemini-2.5-pro',
+    ],
+    'openai-kimi-oauth': [
+        'kimi-k2-thinking',
+        'kimi-k2',
+    ],
+    // gitlab-oauth: 模型通过 Duo Gateway 动态发现，静态列表仅作 fallback
+    'openai-gitlab-oauth': [
+        'gitlab-duo',
+        'claude-3.5-sonnet',
+        'gpt-4o',
+        'claude-sonnet-4',
+    ],
+    // kilo-oauth: 模型列表通过 Kilo API 动态获取，静态列表仅作 fallback
+    'openai-kilo-oauth': [
+        'kilo/auto',
+    ],
 };
 
 /**
@@ -118,6 +148,9 @@ export const PROVIDER_MODELS = {
  */
 export const DYNAMIC_MODEL_PROVIDERS = [
     'cursor-oauth',
+    'openai-copilot-oauth',
+    'openai-gitlab-oauth',
+    'openai-kilo-oauth',
 ];
 
 /**

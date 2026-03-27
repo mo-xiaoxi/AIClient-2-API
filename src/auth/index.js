@@ -40,3 +40,33 @@ export {
     generateCursorAuthParams,
     refreshCursorToken
 } from './cursor-oauth.js';
+
+// Kimi OAuth
+export {
+    handleKimiOAuth,
+    refreshKimiToken
+} from './kimi-oauth.js';
+
+// Copilot OAuth
+export {
+    handleCopilotOAuth,
+    refreshCopilotToken
+} from './copilot-oauth.js';
+
+// CodeBuddy OAuth
+export {
+    handleCodeBuddyOAuth,
+    refreshCodeBuddyToken
+} from './codebuddy-oauth.js';
+
+// Kilo OAuth
+export {
+    handleKiloOAuth,
+    refreshKiloToken
+} from './kilo-oauth.js';
+
+// GitLab Duo OAuth
+export {
+    handleGitLabOAuth,
+    refreshGitLabToken
+} from './gitlab-oauth.js';

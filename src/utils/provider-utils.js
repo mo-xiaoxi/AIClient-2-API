@@ -99,6 +99,17 @@ export const PROVIDER_MAPPINGS = [
         displayName: 'Cursor OAuth',
         needsProjectId: false,
         urlKeys: []
+    },
+    {
+        // Kilo AI OAuth 配置
+        dirName: 'kilo',
+        patterns: ['configs/kilo/', '/kilo/'],
+        providerType: 'openai-kilo-oauth',
+        credPathKey: 'KILO_OAUTH_CREDS_FILE_PATH',
+        defaultCheckModel: 'kilo/auto',
+        displayName: 'Kilo AI OAuth',
+        needsProjectId: false,
+        urlKeys: []
     }
 ];
 
