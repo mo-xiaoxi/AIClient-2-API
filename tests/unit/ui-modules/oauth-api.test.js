@@ -30,6 +30,7 @@ const mockHandleKiroOAuth = jest.fn();
 const mockHandleIFlowOAuth = jest.fn();
 const mockHandleCodexOAuth = jest.fn();
 const mockHandleCursorOAuth = jest.fn();
+const mockHandleKiloOAuth = jest.fn();
 const mockBatchImportGeminiTokensStream = jest.fn();
 const mockBatchImportCodexTokensStream = jest.fn();
 const mockBatchImportKiroRefreshTokensStream = jest.fn();
@@ -47,6 +48,7 @@ jest.unstable_mockModule('../../../src/auth/oauth-handlers.js', () => ({
     batchImportKiroRefreshTokensStream: mockBatchImportKiroRefreshTokensStream,
     importAwsCredentials: mockImportAwsCredentials,
     handleCursorOAuth: mockHandleCursorOAuth,
+    handleKiloOAuth: mockHandleKiloOAuth,
     handleCodexOAuthCallback: jest.fn(),
 }));
 

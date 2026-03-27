@@ -46,6 +46,11 @@ beforeAll(async () => {
         default: jest.fn(),
     }));
 
+    await jest.unstable_mockModule('os', () => ({
+        hostname: jest.fn().mockReturnValue('test-host'),
+        default: { hostname: jest.fn().mockReturnValue('test-host') },
+    }));
+
     await jest.unstable_mockModule('http', () => ({
         __esModule: true,
         default: {
@@ -57,17 +62,20 @@ beforeAll(async () => {
         },
     }));
 
+    const fsMockPromises = {
+        mkdir: jest.fn().mockResolvedValue(undefined),
+        writeFile: jest.fn().mockResolvedValue(undefined),
+        readFile: jest.fn().mockResolvedValue('{}'),
+        readdir: jest.fn().mockResolvedValue([]),
+    };
     await jest.unstable_mockModule('fs', () => ({
         __esModule: true,
         default: {
             existsSync: jest.fn().mockReturnValue(false),
-            promises: {
-                mkdir: jest.fn().mockResolvedValue(undefined),
-                writeFile: jest.fn().mockResolvedValue(undefined),
-                readFile: jest.fn().mockResolvedValue('{}'),
-                readdir: jest.fn().mockResolvedValue([]),
-            },
+            promises: fsMockPromises,
         },
+        promises: fsMockPromises,
+        existsSync: jest.fn().mockReturnValue(false),
     }));
 
     authModule = await import('../../../src/auth/index.js');

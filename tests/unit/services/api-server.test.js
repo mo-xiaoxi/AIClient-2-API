@@ -156,6 +156,11 @@ beforeAll(async () => {
     // Mock converters registration
     await jest.unstable_mockModule('../../../src/converters/register-converters.js', () => ({}));
 
+    // Mock codex websocket handler
+    await jest.unstable_mockModule('../../../src/providers/openai/codex-websocket.js', () => ({
+        createCodexWebSocketHandler: jest.fn(),
+    }));
+
     const mod = await import('../../../src/services/api-server.js');
     startServer = mod.startServer;
     gracefulShutdown = mod.gracefulShutdown;
