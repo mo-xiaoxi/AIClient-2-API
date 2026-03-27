@@ -4,6 +4,7 @@
  */
 
 import { t } from './i18n.js';
+import { escapeHtml } from './utils.js';
 
 // 模型数据缓存
 let modelsCache = null;
@@ -162,7 +163,7 @@ function showCopyToast(modelName, format) {
     toast.className = 'toast toast-success';
     toast.innerHTML = `
         <i class="fas fa-check-circle"></i>
-        <span>${t('models.copiedCurl') || '已复制 curl 命令'}${formatLabel}: ${modelName}</span>
+        <span>${escapeHtml(t('models.copiedCurl') || '已复制 curl 命令')}${escapeHtml(formatLabel)}: ${escapeHtml(modelName)}</span>
     `;
     
     toastContainer.appendChild(toast);
@@ -315,16 +316,6 @@ function getProviderIcon(providerType) {
     return 'fas fa-server';
 }
 
-/**
- * HTML 转义
- * @param {string} text - 原始文本
- * @returns {string} 转义后的文本
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 /**
  * 切换提供商模型列表的展开/折叠状态

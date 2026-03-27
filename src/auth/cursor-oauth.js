@@ -91,7 +91,7 @@ export async function generateCursorAuthParams() {
 export async function handleCursorOAuth(currentConfig, options = {}) {
     const { verifier, challenge, uuid, loginUrl } = await generateCursorAuthParams();
 
-    logger.info(`[Cursor OAuth] Generated auth URL: ${loginUrl}`);
+    logger.debug(`[Cursor OAuth] Auth URL generated (uuid and challenge redacted)`);
 
     // Start background polling (fire-and-forget)
     _startPolling(uuid, verifier).catch((err) => {
