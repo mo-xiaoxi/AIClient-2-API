@@ -111,13 +111,63 @@ beforeAll(async () => {
     }));
 
     // H2 — includes Connect Protocol constants now imported from cursor-h2.js
-    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-h2.js', () => ({
-        CONNECT_END_STREAM_FLAG,
-        frameConnectMessage: jest.fn(() => Buffer.from('framed')),
-        parseConnectFrame: jest.fn(() => null),
-        h2RequestStream: jest.fn(() => ({
-            client: createMockH2Client(),
-            stream: mockH2Stream,
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-h2.js', () => {
+        // Re-import the real CONNECT_ERROR_HTTP_MAP and parseConnectErrorFrame
+        // so end-stream error frames are parsed correctly in tests
+        const CONNECT_ERROR_HTTP_MAP_REAL = {
+            'unauthenticated': 401, 'permission_denied': 403, 'not_found': 404,
+            'resource_exhausted': 429, 'invalid_argument': 400, 'failed_precondition': 400,
+            'unimplemented': 501, 'unavailable': 503, 'internal': 500, 'unknown': 502,
+            'canceled': 499, 'deadline_exceeded': 504,
+        };
+        return {
+            CONNECT_END_STREAM_FLAG,
+            frameConnectMessage: jest.fn(() => Buffer.from('framed')),
+            parseConnectErrorFrame: jest.fn((data) => {
+                try {
+                    const text = new TextDecoder().decode(data);
+                    const p = JSON.parse(text);
+                    if (p?.error) {
+                        const code = p.error.code ?? 'unknown';
+                        const message = p.error.message ?? 'Unknown error';
+                        const detail = p.error.details?.[0]?.debug?.details?.detail || message;
+                        const httpStatus = CONNECT_ERROR_HTTP_MAP_REAL[code] ?? 502;
+                        const err = Object.assign(new Error(detail), { status: httpStatus, connectCode: code });
+                        return { error: err, httpStatus };
+                    }
+                    return null;
+                } catch {
+                    return {
+                        error: Object.assign(new Error('Failed to parse Cursor API error response'), { status: 502 }),
+                        httpStatus: 502,
+                    };
+                }
+            }),
+            h2RequestStream: jest.fn(() => ({
+                client: createMockH2Client(),
+                stream: mockH2Stream,
+            })),
+        };
+    });
+
+    // Truncation
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-truncation.js', () => ({
+        isTruncated: jest.fn(() => false),
+        autoContinueFull: jest.fn(),
+        autoContinueStream: jest.fn(),
+    }));
+
+    // Compression
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-compression.js', () => ({
+        compressMessages: jest.fn((msgs) => msgs),
+    }));
+
+    // Stream guard
+    await jest.unstable_mockModule('../../../../src/providers/cursor/cursor-stream-guard.js', () => ({
+        createStreamGuard: jest.fn(() => ({
+            push: jest.fn((text) => text),
+            finish: jest.fn(() => ''),
+            hasUnlocked: jest.fn(() => true),
         })),
     }));
 
@@ -184,7 +234,8 @@ describe('CursorApiService — end-stream error handling', () => {
             CURSOR_OAUTH_CREDS_FILE_PATH: './configs/cursor/fake/token.json',
             uuid: 'test-uuid',
         });
-        service._initialized = true;
+        service.isInitialized = true;
+        service._tokenStore = { getValidAccessToken: jest.fn(async () => 'mock-token') };
     });
 
     // ========================================================================
@@ -206,7 +257,7 @@ describe('CursorApiService — end-stream error handling', () => {
             await expect(promise).rejects.toThrow('Model name is not valid: "invalid-model"');
         });
 
-        test('rejected error should have status 400', async () => {
+        test('rejected error should have mapped HTTP status (not_found → 404)', async () => {
             const requestBody = {
                 messages: [{ role: 'user', content: 'Hello' }],
             };
@@ -221,7 +272,7 @@ describe('CursorApiService — end-stream error handling', () => {
                 await promise;
                 throw new Error('Should have rejected');
             } catch (err) {
-                expect(err.status).toBe(400);
+                expect(err.status).toBe(404);
             }
         });
 
@@ -247,7 +298,7 @@ describe('CursorApiService — end-stream error handling', () => {
             expect(result.object).toBe('chat.completion');
         });
 
-        test('should return null content when end-stream has non-JSON payload and no text', async () => {
+        test('should reject with 502 when end-stream has non-JSON payload', async () => {
             const requestBody = {
                 messages: [{ role: 'user', content: 'Hello' }],
             };
@@ -259,9 +310,12 @@ describe('CursorApiService — end-stream error handling', () => {
                 mockH2Stream.emit('end');
             });
 
-            const result = await promise;
-            // No text was collected, so content is null (empty string is falsy)
-            expect(result.choices[0].message.content).toBeNull();
+            try {
+                await promise;
+                throw new Error('Should have rejected');
+            } catch (err) {
+                expect(err.status).toBe(502);
+            }
         });
 
         test('should parse error with fallback to error.message when details missing', async () => {

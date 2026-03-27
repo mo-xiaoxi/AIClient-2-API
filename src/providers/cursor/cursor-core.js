@@ -22,7 +22,7 @@ import {
 import {
     CONNECT_END_STREAM_FLAG,
     frameConnectMessage,
-    parseConnectFrame,
+    parseConnectErrorFrame,
     h2RequestStream,
 } from './cursor-h2.js';
 import {
@@ -32,6 +32,13 @@ import {
     saveSession,
     cleanupSession,
 } from './cursor-session.js';
+import {
+    isTruncated,
+    autoContinueFull,
+    autoContinueStream,
+} from './cursor-truncation.js';
+import { compressMessages } from './cursor-compression.js';
+import { createStreamGuard } from './cursor-stream-guard.js';
 import {
     GetUsableModelsRequestSchema,
     GetUsableModelsResponseSchema,
@@ -44,6 +51,27 @@ import {
 const CURSOR_API_URL = 'https://api2.cursor.sh';
 const CURSOR_CLIENT_VERSION = 'cli-2026.02.13-41ac335';
 const GET_USABLE_MODELS_PATH = '/agent.v1.AgentService/GetUsableModels';
+
+// Degenerate loop detection defaults (overridable via env)
+const DEFAULT_MAX_REPEAT_TOKENS = parseInt(process.env.CURSOR_MAX_REPEAT_TOKENS, 10) || 8;
+const DEFAULT_MAX_TOOL_CALL_DEPTH = parseInt(process.env.CURSOR_MAX_TOOL_CALL_DEPTH, 10) || 10;
+
+// Auto-continuation defaults (overridable via env)
+const DEFAULT_MAX_AUTO_CONTINUE = parseInt(process.env.CURSOR_MAX_AUTO_CONTINUE, 10) || 3;
+
+// History compression defaults (disabled by default — opt-in via env)
+const CURSOR_COMPRESSION_ENABLED = process.env.CURSOR_COMPRESSION_ENABLED === 'true';
+const CURSOR_COMPRESSION_LEVEL = parseInt(process.env.CURSOR_COMPRESSION_LEVEL, 10) || 2;
+const CURSOR_COMPRESSION_KEEP_RECENT = parseInt(process.env.CURSOR_COMPRESSION_KEEP_RECENT, 10) || undefined;
+const CURSOR_MAX_HISTORY_TOKENS = parseInt(process.env.CURSOR_MAX_HISTORY_TOKENS, 10) || 120_000;
+
+// Stream guard defaults (disabled by default — opt-in via env)
+const CURSOR_STREAM_GUARD_ENABLED = process.env.CURSOR_STREAM_GUARD_ENABLED === 'true';
+const CURSOR_WARMUP_CHARS = parseInt(process.env.CURSOR_WARMUP_CHARS, 10) || 96;
+const CURSOR_GUARD_CHARS = parseInt(process.env.CURSOR_GUARD_CHARS, 10) || 256;
+
+// HTML token pattern for cross-chunk splicing detection
+const HTML_TOKEN_RE = /(<\/?[a-z][a-z0-9]*\s*\/?>|&[a-z]+;)/gi;
 
 const FALLBACK_MODELS = [
     { id: 'auto', name: 'Auto (Smart Routing)' },
@@ -58,6 +86,142 @@ const FALLBACK_MODELS = [
 
 // 模型缓存 TTL（5 分钟），避免缓存过期后无法获取新模型
 const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
+
+// ============================================================================
+// Degenerate loop detection — module-level functions
+// ============================================================================
+
+/**
+ * Detects degenerate text output loops.
+ *
+ * Two detection strategies:
+ *   1. Short token (≤20 chars) consecutive repeat — when the same small delta
+ *      arrives repeatedly it signals the model is stuck.
+ *   2. HTML token cross-chunk splicing — partial HTML tokens (e.g. `<`, `br`,
+ *      `>`) are buffered in state.tagBuffer; once a complete HTML token is
+ *      assembled it is treated as the effective delta for repeat counting.
+ *
+ * @param {string} text     - Incoming text delta from onText callback
+ * @param {object} state    - Mutable state shared across calls in one request:
+ *                            { lastDelta, repeatCount, tagBuffer, aborted }
+ * @param {object} config   - Optional overrides: { maxRepeatTokens }
+ * @returns {boolean}       - true when a degenerate loop is detected
+ */
+export function checkDegenerateLoop(text, state, config) {
+    if (!text) return false;
+
+    const maxRepeat = (config && config.maxRepeatTokens != null)
+        ? config.maxRepeatTokens
+        : DEFAULT_MAX_REPEAT_TOKENS;
+
+    // Append incoming text to the HTML tag buffer
+    state.tagBuffer += text;
+
+    // Try to extract complete HTML tokens from the buffer
+    HTML_TOKEN_RE.lastIndex = 0;
+    const matches = state.tagBuffer.match(HTML_TOKEN_RE);
+    if (matches && matches.length > 0) {
+        // Use the last complete HTML token as the effective delta
+        const htmlToken = matches[matches.length - 1];
+        // Clear consumed portion from buffer — keep only what follows the last match
+        const lastMatchIdx = state.tagBuffer.lastIndexOf(htmlToken);
+        state.tagBuffer = state.tagBuffer.slice(lastMatchIdx + htmlToken.length);
+
+        // Apply repeat-counting logic on the HTML token
+        if (htmlToken === state.lastDelta) {
+            state.repeatCount++;
+        } else {
+            state.lastDelta = htmlToken;
+            state.repeatCount = 1;
+        }
+
+        if (state.repeatCount >= maxRepeat) {
+            logger.warn(`[CursorApiService] Degenerate loop detected: HTML token "${htmlToken}" repeated ${state.repeatCount} times`);
+            return true;
+        }
+        return false;
+    }
+
+    // No complete HTML token found — check if buffer might be mid-token
+    // (starts with '<' or '&', potentially still assembling)
+    const mightBeHtmlPrefix = /^[<&]/.test(state.tagBuffer) && state.tagBuffer.length < 32;
+    if (mightBeHtmlPrefix) {
+        // Not enough info yet — don't apply short-token logic to partial HTML
+        return false;
+    }
+
+    // Not an HTML token situation — flush the buffer into plain text logic
+    const effectiveDelta = state.tagBuffer;
+    state.tagBuffer = '';
+
+    // Only apply short-token repeat detection
+    if (effectiveDelta.length > 20) {
+        // Long tokens: reset repeat counter, they are considered normal
+        state.lastDelta = effectiveDelta;
+        state.repeatCount = 1;
+        return false;
+    }
+
+    if (effectiveDelta === state.lastDelta) {
+        state.repeatCount++;
+    } else {
+        state.lastDelta = effectiveDelta;
+        state.repeatCount = 1;
+    }
+
+    if (state.repeatCount >= maxRepeat) {
+        logger.warn(`[CursorApiService] Degenerate loop detected: token "${effectiveDelta}" repeated ${state.repeatCount} times`);
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Detects tool-call loops.
+ *
+ * Two detection strategies:
+ *   1. Total depth limit — if more than maxToolCallDepth tool calls have been
+ *      made in this session the model is considered stuck in a tool loop.
+ *   2. Consecutive identical tool+args — three consecutive calls to the same
+ *      tool with identical arguments indicate the model is not making progress.
+ *
+ * @param {object} exec   - Tool execution descriptor: { toolName, decodedArgs }
+ * @param {object} state  - Mutable state: { toolCallDepth, toolCallHistory }
+ * @param {object} config - Optional overrides: { maxToolCallDepth }
+ * @returns {boolean}     - true when a loop is detected
+ */
+export function checkToolCallLoop(exec, state, config) {
+    const maxDepth = (config && config.maxToolCallDepth != null)
+        ? config.maxToolCallDepth
+        : DEFAULT_MAX_TOOL_CALL_DEPTH;
+
+    state.toolCallDepth++;
+
+    if (state.toolCallDepth >= maxDepth) {
+        logger.warn(`[CursorApiService] Tool call loop detected: depth ${state.toolCallDepth} reached limit ${maxDepth}`);
+        return true;
+    }
+
+    // Record this call in history (keep last 3 entries)
+    const key = `${exec.toolName}::${exec.decodedArgs}`;
+    state.toolCallHistory.push(key);
+    if (state.toolCallHistory.length > 3) {
+        state.toolCallHistory.shift();
+    }
+
+    // Check if the last 3 entries are all the same
+    if (
+        state.toolCallHistory.length === 3 &&
+        state.toolCallHistory[0] === state.toolCallHistory[1] &&
+        state.toolCallHistory[1] === state.toolCallHistory[2]
+    ) {
+        logger.warn(`[CursorApiService] Tool call loop detected: tool "${exec.toolName}" called 3 consecutive times with identical args`);
+        return true;
+    }
+
+    return false;
+}
 
 // ============================================================================
 // CursorApiService
@@ -94,7 +258,15 @@ export class CursorApiService {
         await this._ensureInitialized();
         const accessToken = await this._tokenStore.getValidAccessToken();
 
-        const { systemPrompt, userText, images, turns, toolResults } = parseMessages(requestBody.messages || []);
+        let messages = requestBody.messages || [];
+        if (CURSOR_COMPRESSION_ENABLED) {
+            messages = compressMessages(messages, {
+                level: CURSOR_COMPRESSION_LEVEL,
+                keepRecent: CURSOR_COMPRESSION_KEEP_RECENT,
+                maxHistoryTokens: CURSOR_MAX_HISTORY_TOKENS,
+            });
+        }
+        const { systemPrompt, userText, images, turns, toolResults } = parseMessages(messages);
         const tools = requestBody.tools || [];
 
         if (!userText && toolResults.length === 0) {
@@ -116,7 +288,7 @@ export class CursorApiService {
                 h2Stream.removeAllListeners('data');
                 h2Stream.removeAllListeners('end');
                 h2Stream.removeAllListeners('error');
-                return this._collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
+                return this._collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt, accessToken });
             }
         }
 
@@ -139,7 +311,7 @@ export class CursorApiService {
             }
         }, 5_000);
 
-        return this._collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
+        return this._collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt, accessToken });
     }
 
     /**
@@ -149,7 +321,15 @@ export class CursorApiService {
         await this._ensureInitialized();
         const accessToken = await this._tokenStore.getValidAccessToken();
 
-        const { systemPrompt, userText, images, turns, toolResults } = parseMessages(requestBody.messages || []);
+        let messages = requestBody.messages || [];
+        if (CURSOR_COMPRESSION_ENABLED) {
+            messages = compressMessages(messages, {
+                level: CURSOR_COMPRESSION_LEVEL,
+                keepRecent: CURSOR_COMPRESSION_KEEP_RECENT,
+                maxHistoryTokens: CURSOR_MAX_HISTORY_TOKENS,
+            });
+        }
+        const { systemPrompt, userText, images, turns, toolResults } = parseMessages(messages);
         const tools = requestBody.tools || [];
 
         if (!userText && toolResults.length === 0) {
@@ -171,7 +351,7 @@ export class CursorApiService {
                 h2Stream.removeAllListeners('data');
                 h2Stream.removeAllListeners('end');
                 h2Stream.removeAllListeners('error');
-                yield* this._streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
+                yield* this._streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt, accessToken });
                 return;
             }
         }
@@ -195,7 +375,7 @@ export class CursorApiService {
             }
         }, 5_000);
 
-        yield* this._streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey });
+        yield* this._streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt, accessToken });
     }
 
     /**
@@ -281,7 +461,7 @@ export class CursorApiService {
      *
      * Used by both initial requests and session resumption.
      */
-    _collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey }) {
+    _collectFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt = '', accessToken = null }) {
         const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 28)}`;
         const created = Math.floor(Date.now() / 1000);
 
@@ -291,6 +471,13 @@ export class CursorApiService {
         const toolCalls = [];
         const pendingExecs = [];
         let resolved = false;
+
+        const degenerateState = {
+            lastDelta: '',
+            repeatCount: 0,
+            tagBuffer: '',
+            aborted: false,
+        };
 
         const buildResponse = (finishReason = 'stop') => {
             const content = thinkingText
@@ -321,16 +508,13 @@ export class CursorApiService {
                     const msgBytes = pendingBuffer.subarray(5, 5 + msgLen);
                     pendingBuffer = pendingBuffer.subarray(5 + msgLen);
                     if (flags & CONNECT_END_STREAM_FLAG) {
-                        try {
-                            const endPayload = JSON.parse(msgBytes.toString('utf8'));
-                            if (endPayload?.error) {
-                                const detail = endPayload.error.details?.[0]?.debug?.details?.detail || endPayload.error.message;
-                                logger.error(`[CursorApiService] Cursor API error: ${detail}`);
-                                resolved = true;
-                                reject(Object.assign(new Error(detail), { status: 400 }));
-                                return;
-                            }
-                        } catch {}
+                        const errFrame = parseConnectErrorFrame(msgBytes);
+                        if (errFrame) {
+                            logger.error(`[CursorApiService] Cursor API error (${errFrame.error.connectCode}): ${errFrame.error.message}`);
+                            resolved = true;
+                            reject(errFrame.error);
+                            return;
+                        }
                         continue;
                     }
                     try {
@@ -344,7 +528,17 @@ export class CursorApiService {
                                 if (isThinking) {
                                     thinkingText += text;
                                 } else {
-                                    fullText += text;
+                                    if (!degenerateState.aborted && checkDegenerateLoop(text, degenerateState, {})) {
+                                        degenerateState.aborted = true;
+                                        resolved = true;
+                                        clearInterval(heartbeatTimer);
+                                        try { h2Client.close(); } catch {}
+                                        resolve(buildResponse('stop'));
+                                        return;
+                                    }
+                                    if (!degenerateState.aborted) {
+                                        fullText += text;
+                                    }
                                 }
                             },
                             onMcpExec: (exec) => {
@@ -370,10 +564,35 @@ export class CursorApiService {
                 }
             });
 
-            h2Stream.on('end', () => {
+            h2Stream.on('end', async () => {
                 if (resolved) return;
                 clearInterval(heartbeatTimer);
                 try { h2Client.close(); } catch {}
+
+                // Truncation detection & auto-continue (only for non-tool-call responses)
+                if (fullText && toolCalls.length === 0 && isTruncated(fullText, false)) {
+                    try {
+                        const effectiveToken = accessToken || await this._tokenStore.getValidAccessToken();
+                        fullText = await autoContinueFull({
+                            fullText,
+                            model,
+                            accessToken: effectiveToken,
+                            hasTools: false,
+                            maxContinue: DEFAULT_MAX_AUTO_CONTINUE,
+                            systemPrompt,
+                            mcpTools,
+                            buildRequest: buildCursorAgentRequest,
+                            createH2Stream: h2RequestStream,
+                            frameMessage: frameConnectMessage,
+                            processMessage: processAgentServerMessage,
+                            buildHeartbeat: buildHeartbeatBytes,
+                            endStreamFlag: CONNECT_END_STREAM_FLAG,
+                        });
+                    } catch (err) {
+                        logger.warn(`[CursorApiService] Auto-continue failed: ${err.message}`);
+                    }
+                }
+
                 resolved = true;
                 resolve(buildResponse('stop'));
             });
@@ -398,7 +617,7 @@ export class CursorApiService {
      *
      * Used by both initial requests and session resumption.
      */
-    async *_streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey }) {
+    async *_streamFromH2({ h2Client, h2Stream, heartbeatTimer, blobStore, mcpTools, model, sessionKey, systemPrompt = '', accessToken = null }) {
         const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 28)}`;
         const created = Math.floor(Date.now() / 1000);
         const makeChunk = (delta, finishReason = null) => ({
@@ -410,7 +629,21 @@ export class CursorApiService {
         });
 
         const state = { thinkingActive: false, toolCallIndex: 0, pendingExecs: [] };
+        const degenerateState = {
+            lastDelta: '',
+            repeatCount: 0,
+            tagBuffer: '',
+            toolCallDepth: 0,
+            toolCallHistory: [],
+            aborted: false,
+        };
         let mcpExecReceived = false;
+        let accumulatedText = '';
+
+        // Stream guard: warmup + tail buffering (opt-in via CURSOR_STREAM_GUARD_ENABLED)
+        const guard = CURSOR_STREAM_GUARD_ENABLED
+            ? createStreamGuard({ warmupChars: CURSOR_WARMUP_CHARS, guardChars: CURSOR_GUARD_CHARS })
+            : null;
 
         // Queue+signal pattern to bridge event-driven H2 and async generator
         const queue = [];
@@ -442,9 +675,9 @@ export class CursorApiService {
                 pendingBuffer = pendingBuffer.subarray(5 + msgLen);
 
                 if (flags & CONNECT_END_STREAM_FLAG) {
-                    const err = parseConnectFrame(msgBytes);
-                    if (err) {
-                        enqueue({ type: 'chunk', chunk: makeChunk({ content: `\n[Error: ${err.message}]` }) });
+                    const errFrame = parseConnectErrorFrame(msgBytes);
+                    if (errFrame) {
+                        enqueue({ type: 'chunk', chunk: makeChunk({ content: `\n[Error: ${errFrame.error.message}]` }) });
                     }
                     continue;
                 }
@@ -457,6 +690,7 @@ export class CursorApiService {
                             if (!h2Stream.closed && !h2Stream.destroyed) h2Stream.write(data);
                         },
                         onText: (text, isThinking) => {
+                            if (degenerateState.aborted) return;
                             if (isThinking) {
                                 if (!state.thinkingActive) {
                                     state.thinkingActive = true;
@@ -464,14 +698,35 @@ export class CursorApiService {
                                 }
                                 enqueue({ type: 'chunk', chunk: makeChunk({ content: text }) });
                             } else {
+                                if (checkDegenerateLoop(text, degenerateState, {})) {
+                                    degenerateState.aborted = true;
+                                    if (state.thinkingActive) {
+                                        state.thinkingActive = false;
+                                        enqueue({ type: 'chunk', chunk: makeChunk({ content: '</think>' }) });
+                                    }
+                                    enqueue({ type: 'abort_degenerate' });
+                                    return;
+                                }
                                 if (state.thinkingActive) {
                                     state.thinkingActive = false;
                                     enqueue({ type: 'chunk', chunk: makeChunk({ content: '</think>' }) });
                                 }
-                                enqueue({ type: 'chunk', chunk: makeChunk({ content: text }) });
+                                accumulatedText += text;
+                                if (guard) {
+                                    const toSend = guard.push(text);
+                                    if (toSend) enqueue({ type: 'chunk', chunk: makeChunk({ content: toSend }) });
+                                } else {
+                                    enqueue({ type: 'chunk', chunk: makeChunk({ content: text }) });
+                                }
                             }
                         },
                         onMcpExec: (exec) => {
+                            if (degenerateState.aborted) return;
+                            if (checkToolCallLoop(exec, degenerateState, {})) {
+                                degenerateState.aborted = true;
+                                enqueue({ type: 'abort_degenerate' });
+                                return;
+                            }
                             state.pendingExecs.push(exec);
                             mcpExecReceived = true;
 
@@ -512,10 +767,21 @@ export class CursorApiService {
             clearInterval(heartbeatTimer);
             if (!mcpExecReceived) {
                 try { h2Client.close(); } catch {}
+                // Flush stream guard remaining buffer
+                if (guard) {
+                    const remaining = guard.finish();
+                    if (remaining) enqueue({ type: 'chunk', chunk: makeChunk({ content: remaining }) });
+                }
                 if (state.thinkingActive) {
+                    state.thinkingActive = false;
                     enqueue({ type: 'chunk', chunk: makeChunk({ content: '</think>' }) });
                 }
-                enqueue({ type: 'chunk', chunk: makeChunk({}, 'stop') });
+                // Truncation detection: if text was collected and appears truncated, continue
+                if (accumulatedText && !degenerateState.aborted && isTruncated(accumulatedText, false)) {
+                    enqueue({ type: 'continue_needed' });
+                } else {
+                    enqueue({ type: 'chunk', chunk: makeChunk({}, 'stop') });
+                }
             }
             enqueue({ type: 'done' });
         });
@@ -534,11 +800,53 @@ export class CursorApiService {
             while (queue.length > 0) {
                 const item = queue.shift();
                 if (item.type === 'done') { done = true; break; }
+                if (item.type === 'abort_degenerate') {
+                    // Close thinking tag if still open
+                    if (state.thinkingActive) {
+                        state.thinkingActive = false;
+                        yield makeChunk({ content: '</think>' });
+                    }
+                    // Emit final stop chunk and stop processing
+                    yield makeChunk({}, 'stop');
+                    done = true;
+                    break;
+                }
+                if (item.type === 'continue_needed') {
+                    // Auto-continue streaming: transparently yield continuation chunks
+                    try {
+                        const effectiveToken = accessToken || await this._tokenStore.getValidAccessToken();
+                        for await (const contChunk of autoContinueStream({
+                            fullText: accumulatedText,
+                            model,
+                            accessToken: effectiveToken,
+                            hasTools: false,
+                            maxContinue: DEFAULT_MAX_AUTO_CONTINUE,
+                            systemPrompt,
+                            mcpTools,
+                            buildRequest: buildCursorAgentRequest,
+                            createH2Stream: h2RequestStream,
+                            frameMessage: frameConnectMessage,
+                            processMessage: processAgentServerMessage,
+                            buildHeartbeat: buildHeartbeatBytes,
+                            endStreamFlag: CONNECT_END_STREAM_FLAG,
+                        })) {
+                            if (contChunk.type === 'text') {
+                                yield makeChunk({ content: contChunk.text });
+                            }
+                        }
+                    } catch (err) {
+                        logger.warn(`[CursorApiService] Stream auto-continue failed: ${err.message}`);
+                    }
+                    // Emit the stop chunk after continuation
+                    yield makeChunk({}, 'stop');
+                    done = true;
+                    break;
+                }
                 yield item.chunk;
             }
             if (!done) await waitForItem();
         }
-        // Drain remaining chunks
+        // Drain remaining chunks (skip abort signals)
         while (queue.length > 0) {
             const item = queue.shift();
             if (item.type === 'chunk') yield item.chunk;
