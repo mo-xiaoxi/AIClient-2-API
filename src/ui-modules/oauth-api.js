@@ -230,7 +230,17 @@ export async function handleBatchImportKiroTokens(req, res) {
             }));
             return true;
         }
-        
+
+        const MAX_BATCH_SIZE = 1000;
+        if (refreshTokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
+            }));
+            return true;
+        }
+
         logger.info(`[Kiro Batch Import] Starting batch import of ${refreshTokens.length} tokens with SSE...`);
         
         // 设置 SSE 响应头
@@ -320,7 +330,17 @@ export async function handleBatchImportGeminiTokens(req, res) {
             }));
             return true;
         }
-        
+
+        const MAX_BATCH_SIZE = 1000;
+        if (tokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
+            }));
+            return true;
+        }
+
         logger.info(`[Gemini Batch Import] Starting batch import for ${providerType} with ${tokens.length} tokens...`);
         
         // 设置 SSE 响应头
@@ -394,6 +414,16 @@ export async function handleBatchImportCodexTokens(req, res) {
             res.end(JSON.stringify({
                 success: false,
                 error: 'tokens array is required and must not be empty'
+            }));
+            return true;
+        }
+
+        const MAX_BATCH_SIZE = 1000;
+        if (tokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
             }));
             return true;
         }
@@ -680,6 +710,16 @@ export async function handleBatchImportCursorTokens(req, res) {
             res.end(JSON.stringify({
                 success: false,
                 error: 'tokens array is required and must not be empty'
+            }));
+            return true;
+        }
+
+        const MAX_BATCH_SIZE = 1000;
+        if (tokens.length > MAX_BATCH_SIZE) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: false,
+                error: `Too many tokens (max ${MAX_BATCH_SIZE})`
             }));
             return true;
         }
