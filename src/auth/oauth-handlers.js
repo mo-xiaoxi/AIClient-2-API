@@ -28,4 +28,7 @@ export {
     handleCursorOAuth,
     generateCursorAuthParams,
     refreshCursorToken,
+    // Kilo OAuth
+    handleKiloOAuth,
+    refreshKiloToken,
 } from './index.js';
