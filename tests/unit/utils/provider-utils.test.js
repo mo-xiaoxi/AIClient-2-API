@@ -94,4 +94,35 @@ describe('provider-utils', () => {
         await expect(isValidOAuthCredentials(f)).resolves.toBe(false);
         await rm(dir, { recursive: true });
     });
+
+    test('isValidOAuthCredentials true for installed OAuth2 structure', async () => {
+        const dir = await mkdtemp(path.join(os.tmpdir(), 'oauth-'));
+        const f = path.join(dir, 'installed.json');
+        await writeFile(f, JSON.stringify({ installed: { client_id: 'x', client_secret: 'y' } }), 'utf8');
+        await expect(isValidOAuthCredentials(f)).resolves.toBe(true);
+        await rm(dir, { recursive: true });
+    });
+
+    test('isValidOAuthCredentials false for valid JSON without OAuth fields', async () => {
+        const dir = await mkdtemp(path.join(os.tmpdir(), 'oauth-'));
+        const f = path.join(dir, 'nooauth.json');
+        await writeFile(f, JSON.stringify({ name: 'no-oauth', version: '1.0' }), 'utf8');
+        await expect(isValidOAuthCredentials(f)).resolves.toBe(false);
+        await rm(dir, { recursive: true });
+    });
+
+    test('detectProviderFromPath returns null for unknown path', () => {
+        expect(detectProviderFromPath('configs/unknown-provider/cred.json')).toBeNull();
+    });
+
+    test('addToUsedPaths adds "./" prefix when path lacks it', () => {
+        const s = new Set();
+        addToUsedPaths(s, 'configs/gemini/cred.json'); // no './' prefix
+        expect(s.has('./configs/gemini/cred.json')).toBe(true);
+    });
+
+    test('pathsEqual returns true when one path ends with the other', () => {
+        // normalized1 ends with '/' + clean2
+        expect(pathsEqual('/abs/configs/gemini/cred.json', 'cred.json')).toBe(true);
+    });
 });

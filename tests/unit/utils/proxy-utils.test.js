@@ -16,6 +16,9 @@ let isProxyEnabledForProvider;
 let getProxyConfigForProvider;
 let configureAxiosProxy;
 let getGoogleAuthProxyConfig;
+let isTLSSidecarEnabledForProvider;
+let configureTLSSidecar;
+let getTLSSidecarMock;
 
 beforeAll(async () => {
     // Mock tls-sidecar — uses import.meta (excluded from Babel transform)
@@ -48,12 +51,17 @@ beforeAll(async () => {
         SocksProxyAgent: jest.fn().mockImplementation((url) => ({ type: 'socks', url })),
     }));
 
+    const tlsMod = await import('../../../src/utils/tls-sidecar.js');
+    getTLSSidecarMock = tlsMod.getTLSSidecar;
+
     const mod = await import('../../../src/utils/proxy-utils.js');
     parseProxyUrl = mod.parseProxyUrl;
     isProxyEnabledForProvider = mod.isProxyEnabledForProvider;
     getProxyConfigForProvider = mod.getProxyConfigForProvider;
     configureAxiosProxy = mod.configureAxiosProxy;
     getGoogleAuthProxyConfig = mod.getGoogleAuthProxyConfig;
+    isTLSSidecarEnabledForProvider = mod.isTLSSidecarEnabledForProvider;
+    configureTLSSidecar = mod.configureTLSSidecar;
 });
 
 // =============================================================================
@@ -227,5 +235,128 @@ describe('getGoogleAuthProxyConfig()', () => {
         const result = getGoogleAuthProxyConfig(config, 'gemini-cli-oauth');
         expect(result).not.toBeNull();
         expect(result.agent).toBeDefined();
+    });
+});
+
+// =============================================================================
+// isTLSSidecarEnabledForProvider
+// =============================================================================
+
+describe('isTLSSidecarEnabledForProvider()', () => {
+    test('returns false when config is null', () => {
+        expect(isTLSSidecarEnabledForProvider(null, 'grok-custom')).toBe(false);
+    });
+
+    test('returns false when TLS_SIDECAR_ENABLED is absent', () => {
+        const config = { TLS_SIDECAR_ENABLED_PROVIDERS: ['grok-custom'] };
+        expect(isTLSSidecarEnabledForProvider(config, 'grok-custom')).toBe(false);
+    });
+
+    test('returns false when TLS_SIDECAR_ENABLED_PROVIDERS is absent', () => {
+        const config = { TLS_SIDECAR_ENABLED: true };
+        expect(isTLSSidecarEnabledForProvider(config, 'grok-custom')).toBe(false);
+    });
+
+    test('returns false when TLS_SIDECAR_ENABLED_PROVIDERS is not an array', () => {
+        const config = { TLS_SIDECAR_ENABLED: true, TLS_SIDECAR_ENABLED_PROVIDERS: 'grok-custom' };
+        expect(isTLSSidecarEnabledForProvider(config, 'grok-custom')).toBe(false);
+    });
+
+    test('returns true when provider is in TLS_SIDECAR_ENABLED_PROVIDERS', () => {
+        const config = {
+            TLS_SIDECAR_ENABLED: true,
+            TLS_SIDECAR_ENABLED_PROVIDERS: ['grok-custom', 'openai-custom'],
+        };
+        expect(isTLSSidecarEnabledForProvider(config, 'grok-custom')).toBe(true);
+    });
+
+    test('returns false when provider is not in TLS_SIDECAR_ENABLED_PROVIDERS', () => {
+        const config = {
+            TLS_SIDECAR_ENABLED: true,
+            TLS_SIDECAR_ENABLED_PROVIDERS: ['openai-custom'],
+        };
+        expect(isTLSSidecarEnabledForProvider(config, 'grok-custom')).toBe(false);
+    });
+});
+
+// =============================================================================
+// configureTLSSidecar
+// =============================================================================
+
+describe('configureTLSSidecar()', () => {
+    test('returns axiosConfig unchanged when sidecar is not ready', () => {
+        // Default mock: isReady() returns false
+        const config = {
+            TLS_SIDECAR_ENABLED: true,
+            TLS_SIDECAR_ENABLED_PROVIDERS: ['grok-custom'],
+        };
+        const axiosConfig = { url: 'https://api.x.ai/v1/chat', headers: {} };
+        const result = configureTLSSidecar(axiosConfig, config, 'grok-custom');
+        expect(result).toBe(axiosConfig);
+    });
+
+    test('returns axiosConfig unchanged when provider not enabled', () => {
+        const mockWrap = jest.fn();
+        getTLSSidecarMock.mockReturnValueOnce({
+            isReady: () => true,
+            wrapAxiosConfig: mockWrap,
+        });
+        const config = {
+            TLS_SIDECAR_ENABLED: true,
+            TLS_SIDECAR_ENABLED_PROVIDERS: ['other-provider'],
+        };
+        const axiosConfig = { url: 'https://api.x.ai/v1/chat' };
+        const result = configureTLSSidecar(axiosConfig, config, 'grok-custom');
+        expect(mockWrap).not.toHaveBeenCalled();
+        expect(result).toBe(axiosConfig);
+    });
+
+    test('calls wrapAxiosConfig when sidecar ready and provider enabled', () => {
+        const mockWrap = jest.fn();
+        getTLSSidecarMock.mockReturnValueOnce({
+            isReady: () => true,
+            wrapAxiosConfig: mockWrap,
+        });
+        const config = {
+            TLS_SIDECAR_ENABLED: true,
+            TLS_SIDECAR_ENABLED_PROVIDERS: ['grok-custom'],
+            TLS_SIDECAR_PROXY_URL: 'http://127.0.0.1:8443',
+        };
+        const axiosConfig = { url: 'https://api.x.ai/v1/chat' };
+        configureTLSSidecar(axiosConfig, config, 'grok-custom');
+        expect(mockWrap).toHaveBeenCalledWith(axiosConfig, 'http://127.0.0.1:8443');
+    });
+
+    test('resolves relative URL using baseURL when sidecar enabled', () => {
+        const mockWrap = jest.fn();
+        getTLSSidecarMock.mockReturnValueOnce({
+            isReady: () => true,
+            wrapAxiosConfig: mockWrap,
+        });
+        const config = {
+            TLS_SIDECAR_ENABLED: true,
+            TLS_SIDECAR_ENABLED_PROVIDERS: ['grok-custom'],
+        };
+        const axiosConfig = {
+            url: '/v1/chat/completions',
+            baseURL: 'https://api.x.ai',
+        };
+        configureTLSSidecar(axiosConfig, config, 'grok-custom');
+        expect(axiosConfig.url).toBe('https://api.x.ai/v1/chat/completions');
+    });
+
+    test('resolves relative URL using defaultBaseUrl when no baseURL', () => {
+        const mockWrap = jest.fn();
+        getTLSSidecarMock.mockReturnValueOnce({
+            isReady: () => true,
+            wrapAxiosConfig: mockWrap,
+        });
+        const config = {
+            TLS_SIDECAR_ENABLED: true,
+            TLS_SIDECAR_ENABLED_PROVIDERS: ['grok-custom'],
+        };
+        const axiosConfig = { url: 'v1/chat' };
+        configureTLSSidecar(axiosConfig, config, 'grok-custom', 'https://api.x.ai');
+        expect(axiosConfig.url).toBe('https://api.x.ai/v1/chat');
     });
 });

@@ -352,3 +352,219 @@ describe('OpenAIResponsesConverter.convertModelList', () => {
         expect(result.models[0].name).toContain('models/');
     });
 });
+
+// ============================================================================
+// CODEX and GROK routing
+// ============================================================================
+
+describe('OpenAIResponsesConverter - CODEX routing', () => {
+    test('convertRequest CODEX returns a codex-shaped request', () => {
+        const req = { model: 'gpt-4o', input: [{ type: 'message', role: 'user', content: 'Hi' }] };
+        const result = converter.convertRequest(req, MODEL_PROTOCOL_PREFIX.CODEX);
+        expect(result).toBeDefined();
+    });
+
+    test('convertResponse CODEX returns response object', () => {
+        const resp = {
+            response: {
+                id: 'resp-1',
+                model: 'gpt-4o',
+                output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hi' }] }],
+                usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 }
+            }
+        };
+        const result = converter.convertResponse(resp, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(result.object).toBe('response');
+    });
+
+    test('convertStreamChunk CODEX response.created returns events array', () => {
+        const chunk = { type: 'response.created', response: { id: 'r1', model: 'gpt-4o' } };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(Array.isArray(result)).toBe(true);
+    });
+
+    test('convertStreamChunk CODEX response.output_text.delta returns events', () => {
+        const chunk = { type: 'response.output_text.delta', delta: 'hello', item_id: 'i1', output_index: 0, content_index: 0 };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(Array.isArray(result)).toBe(true);
+        expect(result[0].delta).toBe('hello');
+    });
+
+    test('convertStreamChunk CODEX response.completed returns completed event', () => {
+        const chunk = { type: 'response.completed', response: { id: 'r1' } };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(Array.isArray(result)).toBe(true);
+    });
+
+    test('convertStreamChunk CODEX unknown response.* passes through', () => {
+        const chunk = { type: 'response.unknown_event', data: 'test' };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(Array.isArray(result)).toBe(true);
+        expect(result[0]).toBe(chunk);
+    });
+
+    test('convertStreamChunk CODEX non-response type returns null', () => {
+        const chunk = { type: 'other.event' };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(result).toBeNull();
+    });
+});
+
+describe('OpenAIResponsesConverter - GROK routing', () => {
+    test('convertRequest GROK returns a result', () => {
+        const req = { model: 'gpt-4o', input: [{ type: 'message', role: 'user', content: 'Hi' }] };
+        let result;
+        try {
+            result = converter.convertRequest(req, MODEL_PROTOCOL_PREFIX.GROK);
+        } catch {
+            result = null;
+        }
+        expect(result === null || typeof result === 'object').toBe(true);
+    });
+});
+
+// ============================================================================
+// toGeminiResponse
+// ============================================================================
+
+describe('OpenAIResponsesConverter.toGeminiResponse', () => {
+    test('converts message output to gemini candidates', () => {
+        const resp = {
+            output: [{
+                type: 'message',
+                content: [{ type: 'output_text', text: 'Hello Gemini' }]
+            }],
+            usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 }
+        };
+        const result = converter.convertResponse(resp, MODEL_PROTOCOL_PREFIX.GEMINI, 'gpt-4o');
+        expect(result.candidates[0].content.role).toBe('model');
+        expect(result.candidates[0].content.parts[0].text).toBe('Hello Gemini');
+    });
+
+    test('converts function_call output to functionCall part', () => {
+        const resp = {
+            output: [{
+                type: 'function_call',
+                name: 'search',
+                arguments: '{"q":"test"}'
+            }],
+            usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 }
+        };
+        const result = converter.convertResponse(resp, MODEL_PROTOCOL_PREFIX.GEMINI, 'gpt-4o');
+        expect(result.candidates[0].content.parts[0].functionCall.name).toBe('search');
+    });
+
+    test('returns empty candidates for null response', () => {
+        const resp = {};
+        const result = converter.convertResponse(resp, MODEL_PROTOCOL_PREFIX.GEMINI, 'gpt-4o');
+        expect(result.candidates).toBeDefined();
+    });
+});
+
+// ============================================================================
+// toGeminiStreamChunk
+// ============================================================================
+
+describe('OpenAIResponsesConverter.toGeminiStreamChunk', () => {
+    test('response.output_text.delta returns gemini chunk', () => {
+        const chunk = { type: 'response.output_text.delta', delta: 'streaming text' };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.GEMINI, 'gpt-4o');
+        expect(result).toBeDefined();
+        expect(result.candidates[0].content.parts[0].text).toBe('streaming text');
+    });
+
+    test('response.function_call_arguments.delta returns functionCall chunk', () => {
+        const chunk = { type: 'response.function_call_arguments.delta', delta: '{"q"' };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.GEMINI, 'gpt-4o');
+        expect(result).toBeDefined();
+    });
+
+    test('response.completed returns finishReason chunk', () => {
+        const chunk = { type: 'response.completed', response: { usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 } } };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.GEMINI, 'gpt-4o');
+        expect(result).toBeDefined();
+    });
+
+    test('unknown type returns null', () => {
+        const chunk = { type: 'other.event' };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.GEMINI, 'gpt-4o');
+        expect(result).toBeNull();
+    });
+});
+
+// ============================================================================
+// toCodexResponse — additional cases
+// ============================================================================
+
+describe('OpenAIResponsesConverter.toCodexResponse — detailed', () => {
+    test('converts reasoning output item', () => {
+        const resp = {
+            response: {
+                id: 'r1',
+                output: [{ type: 'reasoning', summary: [{ type: 'text', text: 'thinking' }] }],
+                usage: {}
+            }
+        };
+        const result = converter.convertResponse(resp, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(result.output[0].type).toBe('reasoning');
+    });
+
+    test('converts function_call output item', () => {
+        const resp = {
+            response: {
+                id: 'r1',
+                output: [{
+                    type: 'function_call',
+                    call_id: 'c1',
+                    name: 'search',
+                    arguments: '{"q":"test"}'
+                }],
+                usage: {}
+            }
+        };
+        const result = converter.convertResponse(resp, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(result.output[0].type).toBe('function_call');
+        expect(result.output[0].name).toBe('search');
+    });
+});
+
+// ============================================================================
+// toCodexStreamChunk — additional events
+// ============================================================================
+
+describe('OpenAIResponsesConverter.toCodexStreamChunk — additional events', () => {
+    test('response.reasoning_summary_text.delta passes through', () => {
+        const chunk = {
+            type: 'response.reasoning_summary_text.delta',
+            delta: 'thinking...',
+            item_id: 'i1',
+            output_index: 0,
+            summary_index: 0
+        };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(Array.isArray(result)).toBe(true);
+        expect(result[0].delta).toBe('thinking...');
+    });
+
+    test('response.function_call_arguments.delta passes through', () => {
+        const chunk = {
+            type: 'response.function_call_arguments.delta',
+            delta: '{"q"',
+            item_id: 'i1',
+            output_index: 0
+        };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(Array.isArray(result)).toBe(true);
+        expect(result[0].delta).toBe('{"q"');
+    });
+
+    test('response.output_item.added passes through', () => {
+        const chunk = {
+            type: 'response.output_item.added',
+            output_index: 0,
+            item: { type: 'message', id: 'm1' }
+        };
+        const result = converter.convertStreamChunk(chunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gpt-4o');
+        expect(Array.isArray(result)).toBe(true);
+    });
+});

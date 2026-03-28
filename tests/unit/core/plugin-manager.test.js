@@ -424,3 +424,186 @@ describe('discoverPlugins', () => {
         await expect(discoverPlugins()).resolves.not.toThrow();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: destroyAll
+// ---------------------------------------------------------------------------
+describe('PluginManager — destroyAll', () => {
+    test('calls destroy() on enabled plugins', async () => {
+        const pm = new PluginManager();
+        const destroyFn = jest.fn().mockResolvedValue(undefined);
+        pm.register({ name: 'p1', version: '1.0.0', _enabled: true, destroy: destroyFn });
+        await pm.destroyAll();
+        expect(destroyFn).toHaveBeenCalledTimes(1);
+        expect(pm.initialized).toBe(false);
+    });
+
+    test('skips plugins without destroy method', async () => {
+        const pm = new PluginManager();
+        pm.register({ name: 'p2', version: '1.0.0', _enabled: true });
+        await expect(pm.destroyAll()).resolves.not.toThrow();
+    });
+
+    test('skips disabled plugins', async () => {
+        const pm = new PluginManager();
+        const destroyFn = jest.fn();
+        pm.register({ name: 'p3', version: '1.0.0', _enabled: false, destroy: destroyFn });
+        await pm.destroyAll();
+        expect(destroyFn).not.toHaveBeenCalled();
+    });
+
+    test('handles destroy() throwing without crashing', async () => {
+        const pm = new PluginManager();
+        pm.register({
+            name: 'err-plugin', version: '1.0.0', _enabled: true,
+            destroy: jest.fn().mockRejectedValue(new Error('destroy error')),
+        });
+        await expect(pm.destroyAll()).resolves.not.toThrow();
+        expect(pm.initialized).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: isEnabled
+// ---------------------------------------------------------------------------
+describe('PluginManager — isEnabled', () => {
+    test('returns true for an enabled plugin', () => {
+        const pm = new PluginManager();
+        pm.register({ name: 'enabled-p', version: '1.0.0', _enabled: true });
+        expect(pm.isEnabled('enabled-p')).toBe(true);
+    });
+
+    test('returns false for a disabled plugin', () => {
+        const pm = new PluginManager();
+        pm.register({ name: 'disabled-p', version: '1.0.0', _enabled: false });
+        expect(pm.isEnabled('disabled-p')).toBe(false);
+    });
+
+    test('returns false for a nonexistent plugin', () => {
+        const pm = new PluginManager();
+        expect(pm.isEnabled('nonexistent')).toBeFalsy();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: executeMiddleware error handling
+// ---------------------------------------------------------------------------
+describe('PluginManager — executeMiddleware error', () => {
+    test('swallows middleware error and continues', async () => {
+        const pm = new PluginManager();
+        pm.register({
+            name: 'err-mid', version: '1.0.0', _enabled: true,
+            middleware: jest.fn().mockRejectedValue(new Error('mid crash')),
+        });
+        const result = await pm.executeMiddleware({}, {}, new URL('http://localhost/'), {});
+        expect(result.handled).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: executeRoutes error handling
+// ---------------------------------------------------------------------------
+describe('PluginManager — executeRoutes error handling', () => {
+    test('swallows route handler error and continues to next route', async () => {
+        const pm = new PluginManager();
+        pm.register({
+            name: 'err-route', version: '1.0.0', _enabled: true,
+            routes: [{ method: 'GET', path: '/throw', handler: jest.fn().mockRejectedValue(new Error('handler crash')) }],
+        });
+        const handled = await pm.executeRoutes('GET', '/throw', {}, {});
+        expect(handled).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: executeHook
+// ---------------------------------------------------------------------------
+describe('PluginManager — executeHook', () => {
+    test('calls hook on all enabled plugins that have the hook', async () => {
+        const pm = new PluginManager();
+        const hookFn = jest.fn().mockResolvedValue(undefined);
+        pm.register({
+            name: 'hook-plugin', version: '1.0.0', _enabled: true,
+            hooks: { onRequest: hookFn },
+        });
+        await pm.executeHook('onRequest', { req: 'data' });
+        expect(hookFn).toHaveBeenCalledWith({ req: 'data' });
+    });
+
+    test('skips plugins without the specified hook', async () => {
+        const pm = new PluginManager();
+        pm.register({ name: 'no-hook', version: '1.0.0', _enabled: true });
+        await expect(pm.executeHook('onRequest')).resolves.not.toThrow();
+    });
+
+    test('swallows hook error and continues', async () => {
+        const pm = new PluginManager();
+        pm.register({
+            name: 'err-hook', version: '1.0.0', _enabled: true,
+            hooks: { onRequest: jest.fn().mockRejectedValue(new Error('hook error')) },
+        });
+        await expect(pm.executeHook('onRequest')).resolves.not.toThrow();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: getPluginList
+// ---------------------------------------------------------------------------
+describe('PluginManager — getPluginList', () => {
+    test('returns list with plugin metadata', () => {
+        const pm = new PluginManager();
+        pm.pluginsConfig = { plugins: { 'my-plugin': { description: 'A plugin' } } };
+        pm.register({
+            name: 'my-plugin', version: '2.0.0', description: 'Runtime desc',
+            _enabled: true,
+            middleware: jest.fn(),
+            routes: [{ method: 'GET', path: '/p', handler: jest.fn() }],
+            hooks: { onRequest: jest.fn() },
+        });
+        const list = pm.getPluginList();
+        expect(list).toHaveLength(1);
+        const item = list[0];
+        expect(item.name).toBe('my-plugin');
+        expect(item.version).toBe('2.0.0');
+        expect(item.enabled).toBe(true);
+        expect(item.hasMiddleware).toBe(true);
+        expect(item.hasRoutes).toBe(true);
+        expect(item.hasHooks).toBe(true);
+    });
+
+    test('returns empty list when no plugins registered', () => {
+        const pm = new PluginManager();
+        pm.pluginsConfig = { plugins: {} };
+        expect(pm.getPluginList()).toEqual([]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: setPluginEnabled
+// ---------------------------------------------------------------------------
+describe('PluginManager — setPluginEnabled', () => {
+    test('enables a registered plugin', async () => {
+        const pm = new PluginManager();
+        pm.pluginsConfig = { plugins: {} };
+        pm.register({ name: 'toggle', version: '1.0.0', _enabled: false });
+        await pm.setPluginEnabled('toggle', true);
+        expect(pm.plugins.get('toggle')._enabled).toBe(true);
+        expect(mockWriteFile).toHaveBeenCalled();
+    });
+
+    test('disables a registered plugin', async () => {
+        const pm = new PluginManager();
+        pm.pluginsConfig = { plugins: {} };
+        pm.register({ name: 'toggle2', version: '1.0.0', _enabled: true });
+        await pm.setPluginEnabled('toggle2', false);
+        expect(pm.plugins.get('toggle2')._enabled).toBe(false);
+    });
+
+    test('creates pluginsConfig entry for plugin not yet in config', async () => {
+        const pm = new PluginManager();
+        pm.pluginsConfig = { plugins: {} };
+        pm.register({ name: 'new-plugin', version: '1.0.0' });
+        await pm.setPluginEnabled('new-plugin', true);
+        expect(pm.pluginsConfig.plugins['new-plugin'].enabled).toBe(true);
+    });
+});

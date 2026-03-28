@@ -145,5 +145,125 @@ describe('thinking-config', () => {
             expect(result.applied).toBe(true);
             expect(body.reasoning_effort).toBe('high');
         });
+
+        // --- Suffix "0" → NONE mode ---
+        it('should handle suffix "0" as NONE mode (budget of zero)', () => {
+            const body = { model: 'gpt-5(0)', messages: [], reasoning_effort: 'high' };
+            const result = processThinkingSuffix('gpt-5(0)', body, 'openai');
+            expect(result.model).toBe('gpt-5');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning_effort).toBeUndefined();
+        });
+
+        // --- Grok protocol ---
+        it('should apply OpenAI format for grok protocol', () => {
+            const body = { model: 'grok-3(high)', messages: [] };
+            const result = processThinkingSuffix('grok-3(high)', body, 'grok');
+            expect(result.model).toBe('grok-3');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning_effort).toBe('high');
+        });
+
+        // --- Unknown protocol defaults to OpenAI format ---
+        it('should default to OpenAI format for unknown protocol', () => {
+            const body = { model: 'model-x(medium)', messages: [] };
+            const result = processThinkingSuffix('model-x(medium)', body, 'unknown-protocol');
+            expect(result.model).toBe('model-x');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning_effort).toBe('medium');
+        });
+
+        // --- Claude NONE and AUTO ---
+        it('should delete thinking from body for Claude NONE mode', () => {
+            const body = { model: 'claude-opus(none)', thinking: { type: 'enabled' } };
+            const result = processThinkingSuffix('claude-opus(none)', body, 'claude');
+            expect(result.model).toBe('claude-opus');
+            expect(result.applied).toBe(true);
+            expect(body.thinking).toBeUndefined();
+        });
+
+        it('should apply auto thinking for Claude AUTO mode', () => {
+            const body = { model: 'claude-opus(auto)', messages: [] };
+            const result = processThinkingSuffix('claude-opus(auto)', body, 'claude');
+            expect(result.model).toBe('claude-opus');
+            expect(result.applied).toBe(true);
+            expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: -1 });
+        });
+
+        // --- Claude LEVEL with non-adaptive levels (xhigh/minimal) ---
+        it('should convert xhigh level to budget for Claude (not adaptive)', () => {
+            const body = { model: 'claude-sonnet(xhigh)', messages: [] };
+            const result = processThinkingSuffix('claude-sonnet(xhigh)', body, 'claude');
+            expect(result.model).toBe('claude-sonnet');
+            expect(result.applied).toBe(true);
+            expect(body.thinking.type).toBe('enabled');
+            expect(body.thinking.budget_tokens).toBeGreaterThan(0);
+        });
+
+        // --- Gemini NONE, AUTO, LEVEL ---
+        it('should delete Gemini thinkingConfig for NONE mode', () => {
+            const body = {
+                model: 'gemini-2.5(none)',
+                generationConfig: { thinkingConfig: { thinkingBudget: 8192 } },
+            };
+            const result = processThinkingSuffix('gemini-2.5(none)', body, 'gemini');
+            expect(result.model).toBe('gemini-2.5');
+            expect(result.applied).toBe(true);
+            expect(body.generationConfig.thinkingConfig).toBeUndefined();
+        });
+
+        it('should apply auto thinking for Gemini AUTO mode', () => {
+            const body = { model: 'gemini-2.5(auto)' };
+            const result = processThinkingSuffix('gemini-2.5(auto)', body, 'gemini');
+            expect(result.model).toBe('gemini-2.5');
+            expect(result.applied).toBe(true);
+            expect(body.generationConfig.thinkingConfig).toEqual({ includeThoughts: true });
+        });
+
+        it('should apply thinkingBudget for Gemini LEVEL mode', () => {
+            const body = { model: 'gemini-2.5(high)' };
+            const result = processThinkingSuffix('gemini-2.5(high)', body, 'gemini');
+            expect(result.model).toBe('gemini-2.5');
+            expect(result.applied).toBe(true);
+            expect(body.generationConfig.thinkingConfig.thinkingBudget).toBeGreaterThan(0);
+        });
+
+        // --- Codex NONE, AUTO, BUDGET ---
+        it('should delete reasoning from body for Codex NONE mode', () => {
+            const body = { model: 'gpt-5(none)', reasoning: { effort: 'high' } };
+            const result = processThinkingSuffix('gpt-5(none)', body, 'codex');
+            expect(result.model).toBe('gpt-5');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning).toBeUndefined();
+        });
+
+        it('should apply auto thinking for Codex AUTO mode', () => {
+            const body = { model: 'gpt-5(auto)' };
+            const result = processThinkingSuffix('gpt-5(auto)', body, 'codex');
+            expect(result.model).toBe('gpt-5');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning).toEqual({ effort: 'high' });
+        });
+
+        it('should map Codex budget ≤4096 to low effort', () => {
+            const body = { model: 'gpt-5(2048)' };
+            const result = processThinkingSuffix('gpt-5(2048)', body, 'codex');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning.effort).toBe('low');
+        });
+
+        it('should map Codex budget ≤16384 to medium effort', () => {
+            const body = { model: 'gpt-5(8192)' };
+            const result = processThinkingSuffix('gpt-5(8192)', body, 'codex');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning.effort).toBe('medium');
+        });
+
+        it('should map Codex budget >16384 to high effort', () => {
+            const body = { model: 'gpt-5(32768)' };
+            const result = processThinkingSuffix('gpt-5(32768)', body, 'codex');
+            expect(result.applied).toBe(true);
+            expect(body.reasoning.effort).toBe('high');
+        });
     });
 });

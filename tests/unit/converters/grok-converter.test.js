@@ -211,6 +211,253 @@ describe('GrokConverter.formatToolHistory', () => {
 // GrokConverter stream chunk
 // ============================================================================
 
+// ============================================================================
+// GrokConverter.setRequestBaseUrl / setUuid
+// ============================================================================
+
+describe('GrokConverter.setRequestBaseUrl and setUuid', () => {
+    test('setRequestBaseUrl stores the URL as static property', () => {
+        const converter = new GrokConverter();
+        converter.setRequestBaseUrl('http://localhost:3000');
+        expect(GrokConverter.sharedRequestBaseUrl).toBe('http://localhost:3000');
+    });
+
+    test('setUuid stores the uuid as static property', () => {
+        const converter = new GrokConverter();
+        converter.setUuid('test-uuid-123');
+        expect(GrokConverter.sharedUuid).toBe('test-uuid-123');
+    });
+
+    test('setRequestBaseUrl ignores falsy values', () => {
+        const converter = new GrokConverter();
+        GrokConverter.sharedRequestBaseUrl = 'original';
+        converter.setRequestBaseUrl('');
+        expect(GrokConverter.sharedRequestBaseUrl).toBe('original');
+    });
+});
+
+// ============================================================================
+// GrokConverter._appendSsoToken
+// ============================================================================
+
+describe('GrokConverter._appendSsoToken', () => {
+    test('returns url unchanged when no uuid', () => {
+        const converter = new GrokConverter();
+        GrokConverter.sharedUuid = null;
+        const result = converter._appendSsoToken('https://assets.grok.com/foo.png');
+        expect(result).toBe('https://assets.grok.com/foo.png');
+    });
+
+    test('transforms assets.grok.com URL to proxy URL', () => {
+        const converter = new GrokConverter();
+        GrokConverter.sharedUuid = 'my-uuid';
+        GrokConverter.sharedRequestBaseUrl = 'http://localhost:3000';
+        const result = converter._appendSsoToken('https://assets.grok.com/img.png');
+        expect(result).toContain('/api/grok/assets');
+        expect(result).toContain('my-uuid');
+    });
+
+    test('returns url unchanged for non-grok URLs', () => {
+        const converter = new GrokConverter();
+        GrokConverter.sharedUuid = 'uuid';
+        const url = 'https://example.com/image.png';
+        expect(converter._appendSsoToken(url)).toBe(url);
+    });
+
+    test('returns url unchanged when url is falsy', () => {
+        const converter = new GrokConverter();
+        expect(converter._appendSsoToken(null)).toBeNull();
+    });
+});
+
+// ============================================================================
+// GrokConverter.buildToolOverrides
+// ============================================================================
+
+describe('GrokConverter.buildToolOverrides', () => {
+    const converter = new GrokConverter();
+
+    test('returns empty object for null input', () => {
+        expect(converter.buildToolOverrides(null)).toEqual({});
+    });
+
+    test('skips tools without function type', () => {
+        const tools = [{ type: 'retrieval' }];
+        expect(converter.buildToolOverrides(tools)).toEqual({});
+    });
+
+    test('builds overrides from function tools', () => {
+        const tools = [
+            {
+                type: 'function',
+                function: { name: 'myFn', description: 'A function', parameters: { type: 'object' } }
+            }
+        ];
+        const result = converter.buildToolOverrides(tools);
+        expect(result.myFn).toBeDefined();
+        expect(result.myFn.enabled).toBe(true);
+        expect(result.myFn.description).toBe('A function');
+    });
+});
+
+// ============================================================================
+// GrokConverter routing — GEMINI / OPENAI_RESPONSES / CODEX
+// ============================================================================
+
+describe('GrokConverter routing — additional targets', () => {
+    const converter = new GrokConverter();
+    const grokResp = { responseId: 'r1', message: 'Hello!', llmInfo: {} };
+    const doneChunk = {
+        result: {
+            response: {
+                responseId: 'resp-1',
+                isDone: true,
+                token: '',
+                llmInfo: {},
+            },
+        },
+    };
+
+    test('convertResponse GEMINI returns gemini format', () => {
+        const result = converter.convertResponse(grokResp, MODEL_PROTOCOL_PREFIX.GEMINI, 'grok-2');
+        expect(result.candidates).toBeDefined();
+    });
+
+    test('convertResponse OPENAI_RESPONSES returns responses format', () => {
+        const result = converter.convertResponse(grokResp, MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, 'grok-2');
+        expect(result.object).toBe('response');
+    });
+
+    test('convertResponse CODEX returns codex format', () => {
+        const result = converter.convertResponse(grokResp, MODEL_PROTOCOL_PREFIX.CODEX, 'grok-2');
+        expect(result.response).toBeDefined();
+        expect(result.response.output).toBeDefined();
+    });
+
+    test('convertStreamChunk GEMINI returns gemini chunks', () => {
+        const result = converter.convertStreamChunk(doneChunk, MODEL_PROTOCOL_PREFIX.GEMINI, 'grok-2');
+        expect(result).not.toBeNull();
+    });
+
+    test('convertStreamChunk OPENAI_RESPONSES returns events array', () => {
+        const result = converter.convertStreamChunk(doneChunk, MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, 'grok-2');
+        expect(Array.isArray(result)).toBe(true);
+    });
+
+    test('convertStreamChunk CODEX returns codex chunks', () => {
+        const result = converter.convertStreamChunk(doneChunk, MODEL_PROTOCOL_PREFIX.CODEX, 'grok-2');
+        expect(Array.isArray(result)).toBe(true);
+    });
+
+    test('convertModelList OPENAI returns model list', () => {
+        const models = [{ id: 'grok-2', name: 'Grok 2' }];
+        const result = converter.convertModelList(models, MODEL_PROTOCOL_PREFIX.OPENAI);
+        expect(result.object).toBe('list');
+        expect(result.data[0].id).toBe('grok-2');
+    });
+
+    test('convertModelList GEMINI returns gemini model list', () => {
+        const models = [{ id: 'grok-2', name: 'Grok 2' }];
+        const result = converter.convertModelList(models, MODEL_PROTOCOL_PREFIX.GEMINI);
+        expect(result.models[0].name).toBe('models/grok-2');
+    });
+});
+
+// ============================================================================
+// GrokConverter.toGeminiResponse
+// ============================================================================
+
+describe('GrokConverter.toGeminiResponse', () => {
+    const converter = new GrokConverter();
+
+    test('returns null for null grokResponse', () => {
+        expect(converter.toGeminiResponse(null, 'grok-2')).toBeNull();
+    });
+
+    test('converts basic grok response to gemini format', () => {
+        const grokResp = { responseId: 'r1', message: 'Hello from Grok', llmInfo: {} };
+        const result = converter.toGeminiResponse(grokResp, 'grok-2');
+        expect(result.candidates[0].content.role).toBe('model');
+        expect(result.candidates[0].content.parts[0].text).toBe('Hello from Grok');
+    });
+});
+
+// ============================================================================
+// GrokConverter.toOpenAIResponsesResponse
+// ============================================================================
+
+describe('GrokConverter.toOpenAIResponsesResponse', () => {
+    const converter = new GrokConverter();
+
+    test('returns null for null grokResponse', () => {
+        expect(converter.toOpenAIResponsesResponse(null, 'grok-2')).toBeNull();
+    });
+
+    test('converts grok response to OpenAI Responses format', () => {
+        const grokResp = { responseId: 'r1', message: 'OpenAI Responses content', llmInfo: {} };
+        const result = converter.toOpenAIResponsesResponse(grokResp, 'grok-2');
+        expect(result.object).toBe('response');
+        expect(result.status).toBe('completed');
+        expect(result.output[0].type).toBe('message');
+        expect(result.output[0].content[0].text).toBe('OpenAI Responses content');
+    });
+});
+
+// ============================================================================
+// GrokConverter.toCodexResponse
+// ============================================================================
+
+describe('GrokConverter.toCodexResponse', () => {
+    const converter = new GrokConverter();
+
+    test('returns null for null grokResponse', () => {
+        expect(converter.toCodexResponse(null, 'grok-2')).toBeNull();
+    });
+
+    test('converts grok response to Codex format', () => {
+        const grokResp = { responseId: 'r1', message: 'Codex content', llmInfo: {} };
+        const result = converter.toCodexResponse(grokResp, 'grok-2');
+        expect(result.response).toBeDefined();
+        expect(result.response.output[0].type).toBe('message');
+        expect(result.response.output[0].content[0].text).toBe('Codex content');
+    });
+});
+
+// ============================================================================
+// GrokConverter.toOpenAIModelList / toGeminiModelList
+// ============================================================================
+
+describe('GrokConverter model lists', () => {
+    const converter = new GrokConverter();
+
+    test('toOpenAIModelList with array input', () => {
+        const result = converter.toOpenAIModelList([{ id: 'grok-2', display_name: 'Grok 2' }]);
+        expect(result.object).toBe('list');
+        expect(result.data[0].id).toBe('grok-2');
+        expect(result.data[0].owned_by).toBe('xai');
+    });
+
+    test('toOpenAIModelList with models object input', () => {
+        const result = converter.toOpenAIModelList({ models: [{ id: 'grok-3' }] });
+        expect(result.data[0].id).toBe('grok-3');
+    });
+
+    test('toGeminiModelList converts to gemini format', () => {
+        const result = converter.toGeminiModelList([{ id: 'grok-2', name: 'Grok 2' }]);
+        expect(result.models[0].name).toBe('models/grok-2');
+        expect(result.models[0].supportedGenerationMethods).toContain('generateContent');
+    });
+
+    test('toGeminiModelList with string model', () => {
+        const result = converter.toGeminiModelList(['grok-mini']);
+        expect(result.models[0].name).toBe('models/grok-mini');
+    });
+});
+
+// ============================================================================
+// GrokConverter.toOpenAIStreamChunk
+// ============================================================================
+
 describe('GrokConverter.toOpenAIStreamChunk', () => {
     const converter = new GrokConverter();
 

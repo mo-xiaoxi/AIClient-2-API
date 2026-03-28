@@ -255,3 +255,165 @@ describe('GeminiApiService — generateContent and generateContentStream', () =>
         expect(chunks.length).toBeGreaterThanOrEqual(1);
     });
 });
+
+// ---------------------------------------------------------------------------
+// loadCredentials
+// ---------------------------------------------------------------------------
+
+describe('GeminiApiService — loadCredentials()', () => {
+    let fsMod;
+
+    beforeAll(async () => {
+        fsMod = await import('fs');
+    });
+
+    beforeEach(() => {
+        fsMod.promises.readFile.mockReset();
+    });
+
+    test('loads credentials from base64 string when oauthCredsBase64 is set', async () => {
+        const fakeCreds = { access_token: 'tok-123', refresh_token: 'ref-456' };
+        const b64 = Buffer.from(JSON.stringify(fakeCreds)).toString('base64');
+        const svc = makeService({ GEMINI_OAUTH_CREDS_BASE64: b64 });
+
+        await svc.loadCredentials();
+
+        expect(svc.authClient.setCredentials).toHaveBeenCalledWith(
+            expect.objectContaining({ access_token: 'tok-123', refresh_token: 'ref-456' })
+        );
+    });
+
+    test('falls back to file when base64 parsing fails (invalid base64)', async () => {
+        // Provide invalid base64 content that produces invalid JSON after decode
+        const invalidB64 = Buffer.from('{ invalid json }').toString('base64');
+        fsMod.promises.readFile.mockResolvedValueOnce(
+            JSON.stringify({ access_token: 'file-tok' })
+        );
+        const svc = makeService({ GEMINI_OAUTH_CREDS_BASE64: invalidB64 });
+
+        await svc.loadCredentials();
+
+        // Should attempt file read as fallback after failed base64 parse
+        expect(fsMod.promises.readFile).toHaveBeenCalled();
+    });
+
+    test('loads credentials from file when no base64 is set', async () => {
+        const fileCreds = { access_token: 'file-token', refresh_token: 'file-refresh' };
+        fsMod.promises.readFile.mockResolvedValueOnce(JSON.stringify(fileCreds));
+
+        const svc = makeService({ GEMINI_OAUTH_CREDS_FILE_PATH: '/tmp/test-creds.json' });
+        await svc.loadCredentials();
+
+        expect(svc.authClient.setCredentials).toHaveBeenCalledWith(
+            expect.objectContaining({ access_token: 'file-token' })
+        );
+    });
+
+    test('silently handles ENOENT (file not found)', async () => {
+        fsMod.promises.readFile.mockRejectedValueOnce(
+            Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+        );
+        const svc = makeService();
+
+        await expect(svc.loadCredentials()).resolves.not.toThrow();
+    });
+
+    test('does not throw on other file read errors', async () => {
+        fsMod.promises.readFile.mockRejectedValueOnce(new Error('Permission denied'));
+        const svc = makeService();
+
+        await expect(svc.loadCredentials()).resolves.not.toThrow();
+    });
+
+    test('does not throw on invalid JSON in creds file', async () => {
+        fsMod.promises.readFile.mockResolvedValueOnce('{ invalid json }');
+        const svc = makeService();
+
+        await expect(svc.loadCredentials()).resolves.not.toThrow();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// initializeAuth
+// ---------------------------------------------------------------------------
+
+describe('GeminiApiService — initializeAuth()', () => {
+    let fsMod;
+
+    beforeAll(async () => {
+        fsMod = await import('fs');
+    });
+
+    beforeEach(() => {
+        fsMod.promises.readFile.mockReset();
+        fsMod.promises.writeFile.mockReset();
+        mockAuthRequest.mockReset();
+    });
+
+    test('returns early when access_token exists and not expiring (forceRefresh=false)', async () => {
+        fsMod.promises.readFile.mockRejectedValueOnce(
+            Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+        );
+        const svc = makeService();
+        svc.authClient.credentials = {
+            access_token: 'valid-tok',
+            refresh_token: 'ref',
+            expiry_date: Date.now() + 3600000,
+        };
+
+        await expect(svc.initializeAuth(false)).resolves.not.toThrow();
+        expect(svc.authClient.refreshAccessToken).not.toHaveBeenCalled();
+    });
+
+    test('calls refreshAccessToken when forceRefresh=true and refresh_token exists', async () => {
+        fsMod.promises.readFile.mockRejectedValueOnce(
+            Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+        );
+        fsMod.promises.mkdir.mockResolvedValue(undefined);
+        fsMod.promises.writeFile.mockResolvedValue(undefined);
+
+        const svc = makeService();
+        svc.authClient.credentials = {
+            access_token: 'old-tok',
+            refresh_token: 'ref-token',
+            expiry_date: Date.now() + 3600000,
+        };
+        svc.authClient.refreshAccessToken.mockResolvedValueOnce({
+            credentials: { access_token: 'new-tok', refresh_token: 'ref-token' },
+        });
+
+        await expect(svc.initializeAuth(true)).resolves.not.toThrow();
+        expect(svc.authClient.refreshAccessToken).toHaveBeenCalledTimes(1);
+        expect(svc.authClient.setCredentials).toHaveBeenCalledWith(
+            expect.objectContaining({ access_token: 'new-tok' })
+        );
+    });
+
+    test('saves refreshed credentials to file when not using base64', async () => {
+        fsMod.promises.readFile.mockRejectedValueOnce(
+            Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+        );
+        fsMod.promises.mkdir.mockResolvedValue(undefined);
+        fsMod.promises.writeFile.mockResolvedValue(undefined);
+
+        const svc = makeService({ GEMINI_OAUTH_CREDS_FILE_PATH: '/tmp/save-creds.json' });
+        svc.authClient.credentials = { access_token: null, refresh_token: 'ref-token' };
+        svc.authClient.refreshAccessToken.mockResolvedValueOnce({
+            credentials: { access_token: 'saved-tok', refresh_token: 'ref-token' },
+        });
+
+        await svc.initializeAuth(true);
+        expect(fsMod.promises.writeFile).toHaveBeenCalled();
+    });
+
+    test('throws wrapped error when refreshAccessToken fails', async () => {
+        fsMod.promises.readFile.mockRejectedValueOnce(
+            Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+        );
+        const svc = makeService();
+        svc.authClient.credentials = { access_token: null, refresh_token: 'ref-token' };
+        svc.authClient.refreshAccessToken.mockRejectedValueOnce(new Error('Network error'));
+
+        await expect(svc.initializeAuth(true)).rejects.toThrow('Failed to load OAuth credentials.');
+    });
+});

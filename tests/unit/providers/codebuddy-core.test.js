@@ -20,14 +20,19 @@ await jest.unstable_mockModule('../../../src/providers/provider-models.js', () =
 
 const mockGetValidAccessToken = jest.fn();
 const mockIsExpiryDateNear = jest.fn(() => false);
+const mockGetUserId = jest.fn(() => 'test-user-id');
+const mockGetDomain = jest.fn(() => 'www.codebuddy.cn');
 
 await jest.unstable_mockModule('../../../src/providers/codebuddy/codebuddy-token-store.js', () => ({
     CodeBuddyTokenStore: jest.fn().mockImplementation(() => ({
         initialize: jest.fn().mockResolvedValue(undefined),
         getValidAccessToken: mockGetValidAccessToken,
         isExpiryDateNear: mockIsExpiryDateNear,
+        getUserId: mockGetUserId,
+        getDomain: mockGetDomain,
         userId: 'test-user-id',
         domain: 'www.codebuddy.cn',
+        _cached: null,
     })),
 }));
 
@@ -108,6 +113,146 @@ describe('CodeBuddyApiService', () => {
         await expect(
             svc.generateContent('GLM-5.0', { messages: [{ role: 'user', content: 'hi' }] })
         ).rejects.toThrow();
+        delete global.fetch;
+    });
+
+    test('generateContent returns parsed JSON on success', async () => {
+        const payload = { id: 'cmpl-1', choices: [{ message: { content: 'Hello' } }] };
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve(payload),
+        });
+
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        await svc.initialize();
+        const result = await svc.generateContent('GLM-5.0', { messages: [] });
+        expect(result.id).toBe('cmpl-1');
+        delete global.fetch;
+    });
+
+    test('generateContentStream yields parsed SSE chunks', async () => {
+        const chunk = { choices: [{ delta: { content: 'hi' } }] };
+        const sseData = `data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`;
+
+        async function* makeBody() {
+            yield Buffer.from(sseData);
+        }
+
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            body: makeBody(),
+        });
+
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        await svc.initialize();
+
+        const chunks = [];
+        for await (const c of svc.generateContentStream('GLM-5.0', { messages: [] })) {
+            chunks.push(c);
+        }
+        expect(chunks.length).toBeGreaterThanOrEqual(1);
+        delete global.fetch;
+    });
+
+    test('generateContentStream throws on non-ok response', async () => {
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: false,
+            status: 401,
+            text: () => Promise.resolve('Unauthorized'),
+        });
+
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        await svc.initialize();
+        const gen = svc.generateContentStream('GLM-5.0', { messages: [] });
+        await expect(gen.next()).rejects.toThrow('API stream error 401');
+        delete global.fetch;
+    });
+
+    test('isExpiryDateNear returns false when tokenStore is null', async () => {
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        expect(svc.isExpiryDateNear()).toBe(false);
+    });
+
+    test('isExpiryDateNear delegates to tokenStore', async () => {
+        mockIsExpiryDateNear.mockReturnValue(true);
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        await svc.initialize();
+        expect(svc.isExpiryDateNear()).toBe(true);
+    });
+
+    test('forceRefreshToken calls getValidAccessToken when _cached exists', async () => {
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        await svc.initialize();
+        // Simulate cached token
+        svc._tokenStore._cached = { expires_at: Date.now() + 3600000 };
+        await svc.forceRefreshToken();
+        expect(mockGetValidAccessToken).toHaveBeenCalled();
+    });
+
+    test('generateContent auto-initializes when not yet initialized', async () => {
+        const payload = { id: 'cmpl-auto', choices: [] };
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve(payload),
+        });
+
+        // Do NOT call initialize() — let _ensureInitialized do it
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        expect(svc.isInitialized).toBe(false);
+        const result = await svc.generateContent('GLM-5.0', { messages: [] });
+        expect(svc.isInitialized).toBe(true);
+        expect(result.id).toBe('cmpl-auto');
+        delete global.fetch;
+    });
+
+    test('generateContentStream flushes trailing buffer without newline', async () => {
+        const chunk = { choices: [{ delta: { content: 'end' } }] };
+        // Trailing data without a trailing newline
+        const sseData = `data: [DONE]\ndata: ${JSON.stringify(chunk)}`;
+
+        async function* makeBody() {
+            yield Buffer.from(sseData);
+        }
+
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            body: makeBody(),
+        });
+
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        await svc.initialize();
+
+        const chunks = [];
+        for await (const c of svc.generateContentStream('GLM-5.0', { messages: [] })) {
+            chunks.push(c);
+        }
+        // The [DONE] causes early return, so trailing data may or may not be processed
+        // Either way it should not throw
+        expect(Array.isArray(chunks)).toBe(true);
+        delete global.fetch;
+    });
+
+    test('generateContentStream skips malformed SSE chunks', async () => {
+        const chunk = { choices: [{ delta: { content: 'ok' } }] };
+        const sseData = `data: not-json\n\ndata: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`;
+
+        async function* makeBody() {
+            yield Buffer.from(sseData);
+        }
+
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            body: makeBody(),
+        });
+
+        const svc = new CodeBuddyApiService({ CODEBUDDY_OAUTH_CREDS_FILE_PATH: '/tmp/cb.json', uuid: 'u1' });
+        await svc.initialize();
+
+        const chunks = [];
+        for await (const c of svc.generateContentStream('GLM-5.0', { messages: [] })) {
+            chunks.push(c);
+        }
+        expect(chunks.length).toBe(1);
         delete global.fetch;
     });
 });

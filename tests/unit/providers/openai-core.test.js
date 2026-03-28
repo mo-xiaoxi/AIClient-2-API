@@ -220,3 +220,140 @@ describe('OpenAIApiService — listModels', () => {
         await expect(svc.listModels()).rejects.toMatchObject({ response: { status: 500 } });
     });
 });
+
+describe('OpenAIApiService — callApi retry logic', () => {
+    beforeEach(() => { mockRequest.mockReset(); mockGet.mockReset(); });
+
+    test('retries on 429 and succeeds', async () => {
+        const err429 = { response: { status: 429 }, message: 'Rate limited' };
+        mockRequest
+            .mockRejectedValueOnce(err429)
+            .mockResolvedValueOnce({ data: { ok: true } });
+
+        const svc = makeService({ REQUEST_MAX_RETRIES: 1, REQUEST_BASE_DELAY: 1 });
+        const result = await svc.callApi('/chat/completions', {});
+        expect(result).toEqual({ ok: true });
+        expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    test('retries on 500 and succeeds', async () => {
+        const err500 = { response: { status: 500 }, message: 'Server error' };
+        mockRequest
+            .mockRejectedValueOnce(err500)
+            .mockResolvedValueOnce({ data: { ok: true } });
+
+        const svc = makeService({ REQUEST_MAX_RETRIES: 1, REQUEST_BASE_DELAY: 1 });
+        const result = await svc.callApi('/chat/completions', {});
+        expect(result).toEqual({ ok: true });
+        expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    test('retries on network error and succeeds', async () => {
+        const { isRetryableNetworkError } = await import('../../../src/utils/common.js');
+        isRetryableNetworkError.mockReturnValueOnce(true);
+
+        const netErr = { code: 'ECONNRESET', message: 'connection reset' };
+        mockRequest
+            .mockRejectedValueOnce(netErr)
+            .mockResolvedValueOnce({ data: { ok: true } });
+
+        const svc = makeService({ REQUEST_MAX_RETRIES: 1, REQUEST_BASE_DELAY: 1 });
+        const result = await svc.callApi('/chat/completions', {});
+        expect(result).toEqual({ ok: true });
+        expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('OpenAIApiService — streamApi retry logic', () => {
+    beforeEach(() => { mockRequest.mockReset(); mockGet.mockReset(); });
+
+    test('retries stream on 429 and yields chunks', async () => {
+        const err429 = { response: { status: 429 }, message: 'Rate limited' };
+        const chunk = { choices: [{ delta: { content: 'retried' } }] };
+        const sseData = `data: ${JSON.stringify(chunk)}\ndata: [DONE]\n`;
+
+        async function* makeStream() { yield Buffer.from(sseData); }
+        mockRequest
+            .mockRejectedValueOnce(err429)
+            .mockResolvedValueOnce({ data: makeStream() });
+
+        const svc = makeService({ REQUEST_MAX_RETRIES: 1, REQUEST_BASE_DELAY: 1 });
+        const chunks = [];
+        for await (const c of svc.streamApi('/chat/completions', {})) {
+            chunks.push(c);
+        }
+        expect(chunks).toHaveLength(1);
+        expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    test('retries stream on 500 and yields chunks', async () => {
+        const err500 = { response: { status: 500 }, message: 'Server error' };
+        const chunk = { choices: [{ delta: { content: 'ok' } }] };
+        const sseData = `data: ${JSON.stringify(chunk)}\ndata: [DONE]\n`;
+
+        async function* makeStream() { yield Buffer.from(sseData); }
+        mockRequest
+            .mockRejectedValueOnce(err500)
+            .mockResolvedValueOnce({ data: makeStream() });
+
+        const svc = makeService({ REQUEST_MAX_RETRIES: 1, REQUEST_BASE_DELAY: 1 });
+        const chunks = [];
+        for await (const c of svc.streamApi('/chat/completions', {})) {
+            chunks.push(c);
+        }
+        expect(chunks).toHaveLength(1);
+    });
+
+    test('retries stream on network error and yields chunks', async () => {
+        const { isRetryableNetworkError } = await import('../../../src/utils/common.js');
+        isRetryableNetworkError.mockReturnValueOnce(true);
+
+        const netErr = { code: 'ECONNRESET', message: 'connection reset' };
+        const chunk = { choices: [{ delta: { content: 'ok' } }] };
+        const sseData = `data: ${JSON.stringify(chunk)}\ndata: [DONE]\n`;
+
+        async function* makeStream() { yield Buffer.from(sseData); }
+        mockRequest
+            .mockRejectedValueOnce(netErr)
+            .mockResolvedValueOnce({ data: makeStream() });
+
+        const svc = makeService({ REQUEST_MAX_RETRIES: 1, REQUEST_BASE_DELAY: 1 });
+        const chunks = [];
+        for await (const c of svc.streamApi('/chat/completions', {})) {
+            chunks.push(c);
+        }
+        expect(chunks).toHaveLength(1);
+    });
+
+    test('stream skips malformed JSON chunks', async () => {
+        const chunk = { choices: [{ delta: { content: 'ok' } }] };
+        const sseData = `data: not-json\ndata: ${JSON.stringify(chunk)}\ndata: [DONE]\n`;
+
+        async function* makeStream() { yield Buffer.from(sseData); }
+        mockRequest.mockResolvedValueOnce({ data: makeStream() });
+
+        const svc = makeService();
+        const chunks = [];
+        for await (const c of svc.streamApi('/chat/completions', {})) {
+            chunks.push(c);
+        }
+        // Only valid JSON chunk should be yielded
+        expect(chunks).toHaveLength(1);
+    });
+});
+
+describe('OpenAIApiService — generateContentStream internal fields', () => {
+    beforeEach(() => { mockRequest.mockReset(); mockGet.mockReset(); });
+
+    test('strips _monitorRequestId from body', async () => {
+        async function* emptyStream() {}
+        mockRequest.mockResolvedValueOnce({ data: emptyStream() });
+
+        const svc = makeService();
+        const body = { messages: [], _monitorRequestId: 'req-123', _requestBaseUrl: 'http://x.com' };
+        for await (const _ of svc.generateContentStream('m', body)) {}
+        // Fields should be stripped from body
+        expect(body._monitorRequestId).toBeUndefined();
+        expect(body._requestBaseUrl).toBeUndefined();
+    });
+});

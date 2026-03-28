@@ -392,3 +392,178 @@ describe('CursorApiService — end-stream error handling', () => {
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// Lifecycle + utility method tests
+// ---------------------------------------------------------------------------
+
+describe('CursorApiService — lifecycle & utilities', () => {
+    let service;
+
+    beforeEach(() => {
+        mockH2Stream.removeAllListeners();
+        mockH2Stream.closed = false;
+        mockH2Stream.destroyed = false;
+        mockH2Stream.write.mockClear();
+        mockProcessAgentServerMessage.mockReset();
+
+        service = new CursorApiService({
+            CURSOR_OAUTH_CREDS_FILE_PATH: './configs/cursor/fake/token.json',
+            uuid: 'test-uuid',
+        });
+        service.isInitialized = true;
+        service._tokenStore = {
+            getValidAccessToken: jest.fn(async () => 'mock-token'),
+            isExpiryDateNear: jest.fn(() => false),
+            _doRefresh: jest.fn().mockResolvedValue(undefined),
+        };
+    });
+
+    test('isExpiryDateNear returns false when _tokenStore is null', () => {
+        service._tokenStore = null;
+        expect(service.isExpiryDateNear()).toBe(false);
+    });
+
+    test('isExpiryDateNear delegates to tokenStore', () => {
+        service._tokenStore.isExpiryDateNear.mockReturnValue(true);
+        expect(service.isExpiryDateNear()).toBe(true);
+    });
+
+    test('getUsageLimits returns empty object', async () => {
+        const result = await service.getUsageLimits();
+        expect(result).toEqual({});
+    });
+
+    test('refreshToken does not call _doRefresh when token is fresh', async () => {
+        service._tokenStore.isExpiryDateNear.mockReturnValue(false);
+        await service.refreshToken();
+        expect(service._tokenStore._doRefresh).not.toHaveBeenCalled();
+    });
+
+    test('refreshToken calls _doRefresh when token is near expiry', async () => {
+        service._tokenStore.isExpiryDateNear.mockReturnValue(true);
+        await service.refreshToken();
+        expect(service._tokenStore._doRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    test('forceRefreshToken calls _doRefresh unconditionally', async () => {
+        service._tokenStore.isExpiryDateNear.mockReturnValue(false);
+        await service.forceRefreshToken();
+        expect(service._tokenStore._doRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    test('listModels uses cache on second call within TTL', async () => {
+        service._fetchUsableModels = jest.fn().mockResolvedValue([
+            { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet' },
+        ]);
+        const r1 = await service.listModels();
+        const r2 = await service.listModels();
+        expect(service._fetchUsableModels).toHaveBeenCalledTimes(1);
+        expect(r1).toBe(r2);
+    });
+
+    test('listModels returns fetched models', async () => {
+        service._fetchUsableModels = jest.fn().mockResolvedValue([
+            { id: 'gpt-4o', name: 'GPT-4o' },
+            { id: 'claude-4', name: 'Claude 4' },
+        ]);
+        const result = await service.listModels();
+        expect(result.object).toBe('list');
+        expect(result.data).toHaveLength(2);
+        expect(result.data[0].id).toBe('gpt-4o');
+    });
+
+    test('listModels falls back to static list on error', async () => {
+        service._fetchUsableModels = jest.fn().mockRejectedValue(new Error('Network error'));
+        const result = await service.listModels();
+        expect(result.object).toBe('list');
+        expect(result.data.length).toBeGreaterThan(0);
+        // Static fallback models should be present
+        expect(result.data.some(m => m.id === 'auto')).toBe(true);
+    });
+
+    test('listModels uses fallback when _fetchUsableModels returns empty', async () => {
+        service._fetchUsableModels = jest.fn().mockResolvedValue([]);
+        const result = await service.listModels();
+        expect(result.data.some(m => m.id === 'auto')).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// generateContentStream tests
+// ---------------------------------------------------------------------------
+
+describe('CursorApiService — generateContentStream', () => {
+    let service;
+
+    beforeEach(() => {
+        mockH2Stream.removeAllListeners();
+        mockH2Stream.closed = false;
+        mockH2Stream.destroyed = false;
+        mockH2Stream.write.mockClear();
+        mockProcessAgentServerMessage.mockReset();
+
+        service = new CursorApiService({
+            CURSOR_OAUTH_CREDS_FILE_PATH: './configs/cursor/fake/token.json',
+            uuid: 'test-uuid',
+        });
+        service.isInitialized = true;
+        service._tokenStore = { getValidAccessToken: jest.fn(async () => 'mock-token') };
+    });
+
+    test('yields text chunk and finish chunk on success', async () => {
+        mockProcessAgentServerMessage.mockImplementation((msgBytes, callbacks) => {
+            callbacks.onText('streamed text');
+        });
+
+        const requestBody = { messages: [{ role: 'user', content: 'Hello' }] };
+        const gen = service.generateContentStream('claude-4-sonnet', requestBody);
+
+        process.nextTick(() => {
+            mockH2Stream.emit('data', buildDataFrame('proto-data'));
+            mockH2Stream.emit('data', buildNormalEndStreamFrame());
+            mockH2Stream.emit('end');
+        });
+
+        const chunks = [];
+        for await (const c of gen) {
+            chunks.push(c);
+        }
+        // Should have at least a role chunk, content chunk, and finish chunk
+        expect(chunks.length).toBeGreaterThanOrEqual(2);
+        expect(chunks.some(c => c.choices?.[0]?.delta?.content === 'streamed text')).toBe(true);
+    });
+
+    test('yields error chunk when stream returns error frame', async () => {
+        const requestBody = { messages: [{ role: 'user', content: 'Hello' }] };
+        const gen = service.generateContentStream('bad-model', requestBody);
+
+        process.nextTick(() => {
+            mockH2Stream.emit('data', buildErrorEndStreamFrame('Error', 'bad-model'));
+            mockH2Stream.emit('end');
+        });
+
+        const chunks = [];
+        for await (const c of gen) {
+            chunks.push(c);
+        }
+        // Should yield an error message chunk
+        const errorChunk = chunks.find(c => c.choices?.[0]?.delta?.content?.includes('Error'));
+        expect(errorChunk).toBeDefined();
+    });
+
+    test('throws when no user message provided', async () => {
+        const { parseMessages } = await import('../../../../src/providers/cursor/cursor-protobuf.js');
+        parseMessages.mockReturnValueOnce({
+            systemPrompt: '',
+            userText: '',
+            images: [],
+            turns: [],
+            toolResults: [],
+        });
+
+        const requestBody = { messages: [] };
+        const gen = service.generateContentStream('claude-4-sonnet', requestBody);
+        await expect(gen.next()).rejects.toThrow('No user message found');
+    });
+});

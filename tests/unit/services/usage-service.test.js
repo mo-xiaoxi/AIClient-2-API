@@ -116,6 +116,17 @@ describe('UsageService.getUsage()', () => {
         await expect(service.getUsage('claude-kiro-oauth')).rejects.toThrow();
     });
 
+    test('uses kiroApiService.getUsageLimits when adapter lacks direct getUsageLimits', async () => {
+        const mockUsage = { daysUntilReset: 7 };
+        mockServiceInstances['claude-kiro-oauth'] = {
+            // no direct getUsageLimits
+            kiroApiService: { getUsageLimits: jest.fn().mockResolvedValue(mockUsage) },
+        };
+        const service = new UsageService();
+        const result = await service.getUsage('claude-kiro-oauth');
+        expect(result).toEqual(mockUsage);
+    });
+
     test('uses uuid to look up the correct service instance', async () => {
         const mockUsage = { daysUntilReset: 3 };
         mockServiceInstances['claude-kiro-oauthuuid-001'] = {
@@ -176,6 +187,30 @@ describe('UsageService.getAllUsage()', () => {
         // Each provider should have pool entries
         for (const entries of Object.values(results)) {
             expect(Array.isArray(entries)).toBe(true);
+        }
+    });
+
+    test('captures per-pool handler error without failing overall', async () => {
+        // Pool entries for every provider but getUsageLimits throws
+        const makeFailingAdapter = () => ({
+            getUsageLimits: jest.fn().mockRejectedValue(new Error('Pool handler failed')),
+        });
+        mockServiceInstances['claude-kiro-oauthuuid-pool-err'] = makeFailingAdapter();
+        mockServiceInstances['gemini-cli-oauthuuid-pool-err'] = makeFailingAdapter();
+        mockServiceInstances['gemini-antigravityuuid-pool-err'] = makeFailingAdapter();
+        mockServiceInstances['openai-codex-oauthuuid-pool-err'] = makeFailingAdapter();
+        mockServiceInstances['grok-customuuid-pool-err'] = makeFailingAdapter();
+
+        mockPoolManager = {
+            getProviderPools: jest.fn().mockReturnValue([{ uuid: 'uuid-pool-err' }]),
+        };
+
+        const service = new UsageService();
+        const results = await service.getAllUsage();
+        // Every provider entry should have error captured
+        for (const entries of Object.values(results)) {
+            expect(Array.isArray(entries)).toBe(true);
+            expect(entries[0].error).toBeDefined();
         }
     });
 });
@@ -339,5 +374,130 @@ describe('formatCodexUsage()', () => {
             raw: { rateLimit: { primaryWindow: { resetAt: ts } } },
         });
         expect(result.nextDateReset).toBe(new Date(ts * 1000).toISOString());
+    });
+});
+
+// =============================================================================
+// formatAntigravityUsage
+// =============================================================================
+
+describe('formatAntigravityUsage()', () => {
+    test('returns null for null input', () => {
+        expect(formatAntigravityUsage(null)).toBeNull();
+    });
+
+    test('returns null for undefined input', () => {
+        expect(formatAntigravityUsage(undefined)).toBeNull();
+    });
+
+    test('returns object with gemini-antigravity subscription type', () => {
+        const result = formatAntigravityUsage({});
+        expect(result.subscription.type).toBe('gemini-antigravity');
+        expect(result.subscription.title).toBe('Gemini Antigravity');
+        expect(Array.isArray(result.usageBreakdown)).toBe(true);
+    });
+
+    test('maps quotaInfo currentTier to subscription title', () => {
+        const result = formatAntigravityUsage({
+            quotaInfo: { currentTier: 'Premium' },
+        });
+        expect(result.subscription.title).toBe('Premium');
+    });
+
+    test('calculates daysUntilReset from quotaInfo.quotaResetTime', () => {
+        const futureDate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+        const result = formatAntigravityUsage({
+            quotaInfo: { quotaResetTime: futureDate },
+        });
+        expect(result.nextDateReset).toBe(futureDate);
+        expect(result.daysUntilReset).toBeGreaterThan(0);
+    });
+
+    test('maps models object to usageBreakdown items', () => {
+        const result = formatAntigravityUsage({
+            models: {
+                'gemini-flash': { remaining: 0.7, displayName: 'Gemini Flash' },
+            },
+        });
+        expect(result.usageBreakdown).toHaveLength(1);
+        const item = result.usageBreakdown[0];
+        expect(item.modelName).toBe('gemini-flash');
+        expect(item.displayName).toBe('Gemini Flash');
+        expect(item.currentUsage).toBe(30); // (1 - 0.7) * 100
+        expect(item.usageLimit).toBe(100);
+        expect(item.remaining).toBe(0.7);
+    });
+
+    test('defaults remaining to 1 when modelInfo.remaining is not a number', () => {
+        const result = formatAntigravityUsage({
+            models: {
+                'model-a': { remaining: null },
+            },
+        });
+        const item = result.usageBreakdown[0];
+        expect(item.currentUsage).toBe(0); // (1 - 1) * 100
+    });
+
+    test('uses resetTimeRaw as Unix timestamp number', () => {
+        const ts = Math.floor(Date.now() / 1000);
+        const result = formatAntigravityUsage({
+            models: {
+                'model-b': { remaining: 0.5, resetTimeRaw: ts },
+            },
+        });
+        expect(result.usageBreakdown[0].nextDateReset).toBe(new Date(ts * 1000).toISOString());
+    });
+
+    test('uses resetTimeRaw as ISO string', () => {
+        const isoStr = new Date(Date.now() + 3600000).toISOString();
+        const result = formatAntigravityUsage({
+            models: {
+                'model-c': { remaining: 0.8, resetTimeRaw: isoStr },
+            },
+        });
+        expect(result.usageBreakdown[0].nextDateReset).toBe(new Date(isoStr).toISOString());
+    });
+
+    test('falls back to quotaInfo.quotaResetTime when no model resetTimeRaw', () => {
+        const quotaResetTime = new Date(Date.now() + 7200000).toISOString();
+        const result = formatAntigravityUsage({
+            quotaInfo: { quotaResetTime },
+            models: {
+                'model-d': { remaining: 0.9 },
+            },
+        });
+        // resetTimeRaw is undefined, so it uses quotaInfo.quotaResetTime
+        expect(result.usageBreakdown[0].resetTimeRaw).toBe(quotaResetTime);
+    });
+
+    test('uses resetTime string or fallback "--"', () => {
+        const result = formatAntigravityUsage({
+            models: {
+                'model-e': { remaining: 0.5, resetTime: 'in 2 days' },
+                'model-f': { remaining: 0.3 }, // no resetTime → '--'
+            },
+        });
+        expect(result.usageBreakdown.find(i => i.modelName === 'model-e').resetTime).toBe('in 2 days');
+        expect(result.usageBreakdown.find(i => i.modelName === 'model-f').resetTime).toBe('--');
+    });
+
+    test('includes inputTokenLimit and outputTokenLimit when present', () => {
+        const result = formatAntigravityUsage({
+            models: {
+                'model-g': { remaining: 0.6, inputTokenLimit: 1000, outputTokenLimit: 500 },
+            },
+        });
+        const item = result.usageBreakdown[0];
+        expect(item.inputTokenLimit).toBe(1000);
+        expect(item.outputTokenLimit).toBe(500);
+    });
+
+    test('nextDateReset is null when no resetTimeRaw and no quotaInfo', () => {
+        const result = formatAntigravityUsage({
+            models: {
+                'model-h': { remaining: 0.5 },
+            },
+        });
+        expect(result.usageBreakdown[0].nextDateReset).toBeNull();
     });
 });

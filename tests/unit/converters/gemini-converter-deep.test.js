@@ -373,26 +373,303 @@ describe('GeminiConverter - Model List Conversion', () => {
 });
 
 describe('GeminiConverter - remapFunctionCallArgs (via Gemini stream chunks)', () => {
+    function makeFunctionCallChunk(name, args) {
+        return {
+            candidates: [{
+                content: {
+                    parts: [{ functionCall: { name, args } }],
+                },
+            }],
+        };
+    }
+
     test('converts Gemini search tool to OpenAI with normalized args', async () => {
         const converter = new GeminiConverter();
-        // Test that the stream chunk conversion handles function calls properly
-        const geminiChunk = {
-            candidates: [
-                {
-                    content: {
-                        parts: [
-                            {
-                                functionCall: {
-                                    name: 'search',
-                                    args: { query: 'test query' },
-                                },
-                            },
-                        ],
-                    },
-                },
-            ],
-        };
+        const geminiChunk = makeFunctionCallChunk('search', { query: 'test query' });
         const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.OPENAI, 'gemini-pro');
         expect(result.choices[0].delta.tool_calls[0].function.name).toBe('search');
+    });
+
+    // Helper: extract remapped args from Claude stream result
+    function getClaudeToolArgs(result) {
+        const events = Array.isArray(result) ? result : [result];
+        const delta = events.find(e => e.type === 'content_block_delta');
+        if (!delta) return null;
+        return JSON.parse(delta.delta.partial_json);
+    }
+
+    test('EnterPlanMode tool gets empty args (via Claude stream)', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('EnterPlanMode', { someArg: 'value' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs).toEqual({});
+    });
+
+    test('grep: query remapped to pattern, paths array to path (via Claude stream)', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('grep', { query: 'myPattern', paths: ['/src'] });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.pattern).toBe('myPattern');
+        expect(fnArgs.path).toBe('/src');
+    });
+
+    test('grep: description remapped to pattern when no pattern present', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('grep', { description: 'findMe' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.pattern).toBe('findMe');
+        expect(fnArgs.path).toBe('.');
+    });
+
+    test('grep: missing path gets default "."', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('grep', { pattern: 'findMe' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.path).toBe('.');
+    });
+
+    test('glob: query remapped to pattern, paths string to path', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('glob', { query: '**/*.js', paths: '/src' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.pattern).toBe('**/*.js');
+        expect(fnArgs.path).toBe('/src');
+    });
+
+    test('glob: paths array converted to path (first element)', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('glob', { pattern: '*.ts', paths: ['/root', '/other'] });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.path).toBe('/root');
+    });
+
+    test('read: path remapped to file_path', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('read', { path: '/src/index.js' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.file_path).toBe('/src/index.js');
+    });
+
+    test('ls: missing path gets default "."', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('ls', {});
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.path).toBe('.');
+    });
+
+    test('default case: paths array of 1 is converted to path (string)', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('custom_tool', { paths: ['/some/path'] });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.path).toBe('/some/path');
+    });
+
+    test('default case: paths array of >1 is NOT converted to path', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('custom_tool', { paths: ['/a', '/b'] });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.path).toBeUndefined();
+    });
+
+    test('grep: paths as string (not array) is assigned to path', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('grep', { pattern: 'test', paths: '/src/string' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.path).toBe('/src/string');
+    });
+
+    test('glob: paths as string assigned to path', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('glob', { pattern: '*.ts', paths: '/lib' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const fnArgs = getClaudeToolArgs(result);
+        expect(fnArgs.path).toBe('/lib');
+    });
+
+    test('normalizeToolName: "search" tool name becomes "Grep" via Claude stream', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = makeFunctionCallChunk('search', { query: 'findMe' });
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const events = Array.isArray(result) ? result : [result];
+        const blockStart = events.find(e => e.type === 'content_block_start');
+        expect(blockStart?.content_block?.name).toBe('Grep');
+    });
+});
+
+// ============================================================================
+// GeminiConverter - OpenAI Responses Protocol
+// ============================================================================
+
+describe('GeminiConverter - Gemini -> OpenAI Responses Request', () => {
+    test('converts gemini request to openai responses format', async () => {
+        const converter = new GeminiConverter();
+        const geminiReq = {
+            model: 'gemini-pro',
+            contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
+        };
+        const result = converter.convertRequest(geminiReq, MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES);
+        expect(result).toBeDefined();
+        expect(result.model).toBe('gemini-pro');
+    });
+});
+
+describe('GeminiConverter - Gemini -> OpenAI Responses Response', () => {
+    test('converts gemini response to openai responses format', async () => {
+        const converter = new GeminiConverter();
+        const geminiResp = {
+            candidates: [{
+                content: { parts: [{ text: 'Hello there' }], role: 'model' },
+                finishReason: 'STOP',
+            }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+        };
+        const result = converter.convertResponse(geminiResp, MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, 'gemini-pro');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('GeminiConverter - Gemini -> OpenAI Responses Stream Chunk', () => {
+    test('converts gemini stream chunk to openai responses events', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = {
+            candidates: [{
+                content: { parts: [{ text: 'chunk' }], role: 'model' },
+            }],
+        };
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, 'gemini-pro');
+        expect(result).toBeDefined();
+    });
+
+    test('returns empty array for null chunk', async () => {
+        const converter = new GeminiConverter();
+        const result = converter.convertStreamChunk(null, MODEL_PROTOCOL_PREFIX.OPENAI_RESPONSES, 'gemini-pro');
+        // toOpenAIResponsesStreamChunk delegates to toOpenAIStreamChunk which may return null,
+        // resulting in an empty array or null
+        expect(result === null || Array.isArray(result)).toBe(true);
+    });
+});
+
+// ============================================================================
+// GeminiConverter - Codex Protocol
+// ============================================================================
+
+describe('GeminiConverter - Gemini -> Codex Request', () => {
+    test('converts gemini request to codex format', async () => {
+        const converter = new GeminiConverter();
+        const geminiReq = {
+            model: 'gemini-pro',
+            contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
+        };
+        const result = converter.convertRequest(geminiReq, MODEL_PROTOCOL_PREFIX.CODEX);
+        expect(result).toBeDefined();
+    });
+});
+
+describe('GeminiConverter - Gemini -> Codex Response', () => {
+    test('converts gemini response to codex format', async () => {
+        const converter = new GeminiConverter();
+        const geminiResp = {
+            candidates: [{
+                content: { parts: [{ text: 'Codex response text' }], role: 'model' },
+                finishReason: 'STOP',
+            }],
+        };
+        const result = converter.convertResponse(geminiResp, MODEL_PROTOCOL_PREFIX.CODEX, 'gemini-pro');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('GeminiConverter - Gemini -> Codex Stream Chunk', () => {
+    test('converts gemini stream chunk to codex format', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = {
+            candidates: [{
+                content: { parts: [{ text: 'chunk text' }], role: 'model' },
+            }],
+        };
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CODEX, 'gemini-pro');
+        expect(result).toBeDefined();
+    });
+});
+
+// ============================================================================
+// GeminiConverter - Grok Protocol
+// ============================================================================
+
+describe('GeminiConverter - Gemini -> Grok Request', () => {
+    test('converts gemini request to grok format', async () => {
+        const converter = new GeminiConverter();
+        const geminiReq = {
+            model: 'gemini-pro',
+            contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
+        };
+        const result = converter.convertRequest(geminiReq, MODEL_PROTOCOL_PREFIX.GROK);
+        expect(result).toBeDefined();
+    });
+});
+
+// ============================================================================
+// GeminiConverter - Claude stream chunk
+// ============================================================================
+
+describe('GeminiConverter - Gemini -> Claude Stream Chunk', () => {
+    test('converts text chunk to claude content_block_delta', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = {
+            candidates: [{
+                content: { parts: [{ text: 'Hello' }], role: 'model' },
+            }],
+        };
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        expect(result).toBeDefined();
+        const events = Array.isArray(result) ? result : [result];
+        const delta = events.find(e => e.type === 'content_block_delta');
+        expect(delta).toBeDefined();
+        expect(delta.delta.text).toBe('Hello');
+    });
+
+    test('converts thinking chunk with thought=true', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = {
+            candidates: [{
+                content: {
+                    parts: [{ text: 'thinking text', thought: true }],
+                    role: 'model'
+                },
+            }],
+        };
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        const events = Array.isArray(result) ? result : [result];
+        const thinking = events.find(e => e?.delta?.type === 'thinking_delta');
+        expect(thinking).toBeDefined();
+        expect(thinking.delta.thinking).toBe('thinking text');
+    });
+
+    test('handles finishReason in chunk', async () => {
+        const converter = new GeminiConverter();
+        const geminiChunk = {
+            candidates: [{
+                content: { parts: [], role: 'model' },
+                finishReason: 'STOP',
+            }],
+        };
+        const result = converter.convertStreamChunk(geminiChunk, MODEL_PROTOCOL_PREFIX.CLAUDE, 'gemini-pro');
+        expect(result).toBeDefined();
+        if (result) {
+            const events = Array.isArray(result) ? result : [result];
+            const delta = events.find(e => e.type === 'message_delta');
+            expect(delta?.delta?.stop_reason).toBe('end_turn');
+        }
     });
 });

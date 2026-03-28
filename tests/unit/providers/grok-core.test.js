@@ -8,6 +8,7 @@
  */
 
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
+import { Readable } from 'node:stream';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -242,5 +243,364 @@ describe('GrokApiService — getMaxRequestRetries', () => {
     test('returns 3 for zero or negative value', () => {
         const svc = makeService({ REQUEST_MAX_RETRIES: '0' });
         expect(svc.getMaxRequestRetries()).toBe(3);
+    });
+});
+
+describe('GrokApiService — _extractPostId', () => {
+    test('extracts id from /post/<id> URL', () => {
+        const svc = makeService();
+        const id = 'abcdef1234567890abcdef1234567890';
+        expect(svc._extractPostId(`https://grok.com/imagine/post/${id}`)).toBe(id);
+    });
+
+    test('extracts id from /generated/<id>/ URL', () => {
+        const svc = makeService();
+        const id = 'abcdef1234567890abcdef1234567890';
+        expect(svc._extractPostId(`https://assets.grok.com/generated/${id}/video.mp4`)).toBe(id);
+    });
+
+    test('returns null for non-matching text', () => {
+        const svc = makeService();
+        expect(svc._extractPostId('https://grok.com/chat')).toBeNull();
+    });
+
+    test('returns null for null input', () => {
+        const svc = makeService();
+        expect(svc._extractPostId(null)).toBeNull();
+    });
+});
+
+describe('GrokApiService — buildPayload', () => {
+    test('returns payload with expected fields', () => {
+        const svc = makeService();
+        const body = { messages: [{ role: 'user', content: 'Hello' }] };
+        const payload = svc.buildPayload('grok-3', body);
+        expect(payload).toHaveProperty('message');
+        expect(payload).toHaveProperty('modelName');
+        expect(payload).toHaveProperty('modelMode');
+    });
+
+    test('uses grok-3 as fallback for unknown model', () => {
+        const svc = makeService();
+        const body = { messages: [{ role: 'user', content: 'Hi' }] };
+        const payload = svc.buildPayload('unknown-model', body);
+        expect(payload.modelName).toBe('grok-3');
+    });
+
+    test('sets disableNsfwFilter when nsfw=true', () => {
+        const svc = makeService();
+        const body = { messages: [{ role: 'user', content: 'Hi' }], nsfw: true };
+        const payload = svc.buildPayload('grok-3', body);
+        expect(payload.disableNsfwFilter).toBe(true);
+    });
+
+    test('handles grok-3-mini model mapping', () => {
+        const svc = makeService();
+        const body = { messages: [{ role: 'user', content: 'Hi' }] };
+        const payload = svc.buildPayload('grok-3-mini', body);
+        expect(payload.modelMode).toBe('MODEL_MODE_GROK_3_MINI_THINKING');
+    });
+
+    test('combines multi-turn messages into single message string', () => {
+        const svc = makeService();
+        const body = {
+            messages: [
+                { role: 'user', content: 'Hello' },
+                { role: 'assistant', content: 'Hi there' },
+                { role: 'user', content: 'Follow up' },
+            ]
+        };
+        const payload = svc.buildPayload('grok-3', body);
+        expect(payload.message).toContain('Follow up');
+        expect(payload.message).toContain('Hi there');
+    });
+
+    test('handles array content in messages', () => {
+        const svc = makeService();
+        const body = {
+            messages: [{ role: 'user', content: [{ type: 'text', text: 'Image desc' }, { type: 'image_url', image_url: { url: 'http://img.example.com/a.jpg' } }] }]
+        };
+        const payload = svc.buildPayload('grok-3', body);
+        expect(payload.message).toContain('Image desc');
+    });
+});
+
+describe('GrokApiService — setupNsfw', () => {
+    beforeEach(() => mockAxios.mockReset());
+
+    test('calls acceptTos, setBirthDate, enableNsfwAccount', async () => {
+        const svc = makeService();
+        svc.nsfwSetupDone = false;
+        // Mock all axios calls to succeed
+        mockAxios.mockResolvedValue({ data: {} });
+
+        await svc.setupNsfw();
+        expect(svc.nsfwSetupDone).toBe(true);
+        expect(mockAxios).toHaveBeenCalledTimes(3);
+    });
+
+    test('is idempotent (does not call again when nsfwSetupDone=true)', async () => {
+        const svc = makeService();
+        svc.nsfwSetupDone = true;
+        await svc.setupNsfw();
+        expect(mockAxios).not.toHaveBeenCalled();
+    });
+
+    test('does not throw when enableNsfwAccount throws', async () => {
+        const svc = makeService();
+        svc.nsfwSetupDone = false;
+        // First two calls succeed (acceptTos, setBirthDate), third throws
+        mockAxios.mockResolvedValueOnce({ data: {} });
+        mockAxios.mockResolvedValueOnce({ data: {} });
+        mockAxios.mockRejectedValueOnce(new Error('grpc error'));
+
+        await expect(svc.setupNsfw()).resolves.not.toThrow();
+        expect(svc.nsfwSetupDone).toBe(false);
+    });
+});
+
+describe('GrokApiService — refreshToken', () => {
+    test('calls poolManager.resetProviderRefreshStatus when poolManager exists', async () => {
+        const { getProviderPoolManager } = await import('../../../src/services/service-manager.js');
+        const mockPool = { resetProviderRefreshStatus: jest.fn() };
+        getProviderPoolManager.mockReturnValueOnce(mockPool);
+
+        const svc = makeService({ uuid: 'test-uuid' });
+        await svc.refreshToken();
+        expect(mockPool.resetProviderRefreshStatus).toHaveBeenCalled();
+    });
+
+    test('does not throw when poolManager is null', async () => {
+        const { getProviderPoolManager } = await import('../../../src/services/service-manager.js');
+        getProviderPoolManager.mockReturnValueOnce(null);
+
+        const svc = makeService();
+        await expect(svc.refreshToken()).resolves.not.toThrow();
+    });
+});
+
+describe('GrokApiService — getUsageLimits', () => {
+    beforeEach(() => mockAxios.mockReset());
+
+    test('returns usage data on success', async () => {
+        const svc = makeService();
+        mockAxios.mockResolvedValueOnce({
+            data: { remainingQueries: 80, totalQueries: 100 }
+        });
+        const result = await svc.getUsageLimits();
+        expect(result).toHaveProperty('remaining');
+        expect(svc.lastSyncAt).toBeDefined();
+    });
+
+    test('uses token-based fields when totalQueries=0', async () => {
+        const svc = makeService();
+        mockAxios.mockResolvedValueOnce({
+            data: { remainingTokens: 5000, totalTokens: 10000, totalQueries: 0 }
+        });
+        const result = await svc.getUsageLimits();
+        expect(result.unit).toBe('tokens');
+    });
+
+    test('throws on axios failure', async () => {
+        const svc = makeService();
+        mockAxios.mockRejectedValueOnce(new Error('Network timeout'));
+        await expect(svc.getUsageLimits()).rejects.toThrow('Network timeout');
+    });
+});
+
+describe('GrokApiService — generateContentStream (basic)', () => {
+
+    beforeEach(() => mockAxios.mockReset());
+
+    test('yields parsed JSON chunks from SSE stream', async () => {
+        const svc = makeService();
+        svc.isInitialized = true;
+
+        const chunk = { result: { response: { token: 'Hello', responseId: 'r1' } } };
+        const sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+        const readable = Readable.from([Buffer.from(sseData)]);
+        mockAxios.mockResolvedValueOnce({ data: readable });
+
+        const chunks = [];
+        for await (const c of svc.generateContentStream('grok-3', { messages: [{ role: 'user', content: 'Hi' }] })) {
+            chunks.push(c);
+        }
+        expect(chunks.length).toBeGreaterThanOrEqual(1);
+        const hasToken = chunks.some(c => c.result?.response?.token === 'Hello');
+        expect(hasToken).toBe(true);
+    });
+
+    test('throws on HTTP error (non-retryable)', async () => {
+        const svc = makeService({ REQUEST_MAX_RETRIES: 0 });
+        svc.isInitialized = true;
+
+        const err = Object.assign(new Error('Not Found'), { response: { status: 404 } });
+        mockAxios.mockRejectedValueOnce(err);
+
+        const gen = svc.generateContentStream('grok-3', { messages: [{ role: 'user', content: 'Hi' }] });
+        await expect(gen.next()).rejects.toThrow();
+    });
+});
+
+describe('GrokApiService — listModels', () => {
+    test('returns data with model list', async () => {
+        const svc = makeService();
+        const result = await svc.listModels();
+        expect(result).toHaveProperty('data');
+        expect(Array.isArray(result.data)).toBe(true);
+        expect(result.data.length).toBeGreaterThan(0);
+        expect(result.data[0]).toHaveProperty('id');
+        expect(result.data[0]).toHaveProperty('object', 'model');
+    });
+});
+
+describe('GrokApiService — createPost', () => {
+    beforeEach(() => mockAxios.mockReset());
+
+    test('returns postId on success', async () => {
+        const svc = makeService();
+        mockAxios.mockResolvedValueOnce({ data: { post: { id: 'post-123' } } });
+        const postId = await svc.createPost('VIDEO', 'http://example.com/video.mp4', 'test prompt');
+        expect(postId).toBe('post-123');
+    });
+
+    test('returns undefined when response has no postId', async () => {
+        const svc = makeService();
+        mockAxios.mockResolvedValueOnce({ data: {} });
+        const postId = await svc.createPost('IMAGE', null, null);
+        expect(postId).toBeUndefined();
+    });
+
+    test('returns null on axios failure', async () => {
+        const svc = makeService();
+        mockAxios.mockRejectedValueOnce(new Error('Network error'));
+        const postId = await svc.createPost('IMAGE', null, 'prompt');
+        expect(postId).toBeNull();
+    });
+
+    test('includes prompt in payload when provided', async () => {
+        const svc = makeService();
+        let capturedData;
+        mockAxios.mockImplementationOnce((cfg) => {
+            capturedData = cfg.data;
+            return Promise.resolve({ data: { post: { id: 'p1' } } });
+        });
+        await svc.createPost('TEXT', null, 'my prompt');
+        expect(capturedData.prompt).toBe('my prompt');
+    });
+});
+
+describe('GrokApiService — upscaleVideo', () => {
+    beforeEach(() => mockAxios.mockReset());
+
+    test('returns input URL unchanged when null', async () => {
+        const svc = makeService();
+        const result = await svc.upscaleVideo(null);
+        expect(result).toBeNull();
+    });
+
+    test('returns original URL when no video ID can be extracted', async () => {
+        const svc = makeService();
+        const url = 'https://example.com/no-id-here';
+        const result = await svc.upscaleVideo(url);
+        expect(result).toBe(url);
+    });
+
+    test('returns hdMediaUrl on success', async () => {
+        const svc = makeService();
+        const videoId = 'abcdef1234567890abcdef1234567890';
+        const url = `https://grok.com/generated/${videoId}/video.mp4`;
+        mockAxios.mockResolvedValueOnce({ data: { hdMediaUrl: 'https://hd.example.com/video.mp4' } });
+        const result = await svc.upscaleVideo(url);
+        expect(result).toBe('https://hd.example.com/video.mp4');
+    });
+
+    test('returns original URL when axios fails', async () => {
+        const svc = makeService();
+        const videoId = 'abcdef1234567890abcdef1234567890';
+        const url = `https://grok.com/generated/${videoId}/video.mp4`;
+        mockAxios.mockRejectedValueOnce(new Error('error'));
+        const result = await svc.upscaleVideo(url);
+        expect(result).toBe(url);
+    });
+});
+
+describe('GrokApiService — createVideoShareLink', () => {
+    beforeEach(() => mockAxios.mockReset());
+
+    test('returns null when postId is null', async () => {
+        const svc = makeService();
+        const result = await svc.createVideoShareLink(null);
+        expect(result).toBeNull();
+    });
+
+    test('returns public resourceUrl on success', async () => {
+        const svc = makeService();
+        const postId = 'abcdef1234567890abcdef12345678ab';
+        mockAxios.mockResolvedValueOnce({
+            data: { shareLink: `https://x.ai/imagine/post/${postId}` },
+        });
+        const result = await svc.createVideoShareLink(postId);
+        expect(result).toContain('imagine-public');
+        expect(result).toContain('.mp4');
+    });
+
+    test('returns null when shareLink is missing from response', async () => {
+        const svc = makeService();
+        mockAxios.mockResolvedValueOnce({ data: {} });
+        const result = await svc.createVideoShareLink('post-id');
+        expect(result).toBeNull();
+    });
+
+    test('returns null on axios failure', async () => {
+        const svc = makeService();
+        mockAxios.mockRejectedValueOnce(Object.assign(new Error('error'), { response: { data: 'err' } }));
+        const result = await svc.createVideoShareLink('post-id');
+        expect(result).toBeNull();
+    });
+});
+
+describe('GrokApiService — generateContent', () => {
+    beforeEach(() => mockAxios.mockReset());
+
+    test('collects token from stream and returns collected result', async () => {
+        const svc = makeService();
+        svc.isInitialized = true;
+
+        const chunk = { result: { response: { token: 'Hello', responseId: 'r1' } } };
+        const sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+        const readable = Readable.from([Buffer.from(sseData)]);
+        mockAxios.mockResolvedValueOnce({ data: readable });
+
+        const result = await svc.generateContent('grok-3', { messages: [{ role: 'user', content: 'Hi' }] });
+        expect(result.message).toBe('Hello');
+        expect(result.responseId).toBe('r1');
+    });
+});
+
+describe('GrokApiService — uploadFile', () => {
+    beforeEach(() => mockAxios.mockReset());
+
+    test('returns null when b64 is empty (non-data-url)', async () => {
+        const svc = makeService();
+        const result = await svc.uploadFile('https://example.com/file.png');
+        expect(result).toBeNull();
+    });
+
+    test('returns upload response data when given a data URL', async () => {
+        const svc = makeService();
+        const fakeData = 'some-base64-content';
+        const dataUrl = `data:image/png;base64,${fakeData}`;
+        mockAxios.mockResolvedValueOnce({ data: { fileId: 'file-123' } });
+        const result = await svc.uploadFile(dataUrl);
+        expect(result).toEqual({ fileId: 'file-123' });
+    });
+
+    test('returns null on upload failure', async () => {
+        const svc = makeService();
+        const dataUrl = 'data:image/png;base64,abc123';
+        mockAxios.mockRejectedValueOnce(new Error('upload error'));
+        const result = await svc.uploadFile(dataUrl);
+        expect(result).toBeNull();
     });
 });

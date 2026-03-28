@@ -101,6 +101,31 @@ await jest.unstable_mockModule('../../../src/providers/cursor/cursor-core.js', (
     CursorApiService: jest.fn(() => mockCursorService),
 }));
 
+const mockKimiService = makeMockService();
+await jest.unstable_mockModule('../../../src/providers/kimi/kimi-core.js', () => ({
+    KimiApiService: jest.fn(() => mockKimiService),
+}));
+
+const mockCopilotService = makeMockService();
+await jest.unstable_mockModule('../../../src/providers/copilot/copilot-core.js', () => ({
+    CopilotApiService: jest.fn(() => mockCopilotService),
+}));
+
+const mockCodeBuddyService = makeMockService();
+await jest.unstable_mockModule('../../../src/providers/codebuddy/codebuddy-core.js', () => ({
+    CodeBuddyApiService: jest.fn(() => mockCodeBuddyService),
+}));
+
+const mockKiloService = makeMockService();
+await jest.unstable_mockModule('../../../src/providers/kilo/kilo-core.js', () => ({
+    KiloApiService: jest.fn(() => mockKiloService),
+}));
+
+const mockGitLabService = makeMockService();
+await jest.unstable_mockModule('../../../src/providers/gitlab/gitlab-core.js', () => ({
+    GitLabApiService: jest.fn(() => mockGitLabService),
+}));
+
 // Import all adapter classes after mocking
 const {
     ApiServiceAdapter,
@@ -116,6 +141,11 @@ const {
     ForwardApiServiceAdapter,
     GrokApiServiceAdapter,
     CursorApiServiceAdapter,
+    KimiApiServiceAdapter,
+    CopilotApiServiceAdapter,
+    CodeBuddyApiServiceAdapter,
+    KiloApiServiceAdapter,
+    GitLabApiServiceAdapter,
     getServiceAdapter,
     getRegisteredProviders,
     registerAdapter,
@@ -708,5 +738,302 @@ describe('clearServiceInstancesForTests', () => {
         const adapter2 = getServiceAdapter(config);
         // After clearing, a new instance should be created
         expect(adapter1).not.toBe(adapter2);
+    });
+});
+
+describe('KimiApiServiceAdapter', () => {
+    let adapter;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockKimiService.isInitialized = true;
+        adapter = new KimiApiServiceAdapter({ uuid: 'km1' });
+    });
+
+    test('generateContent delegates to kimiApiService', async () => {
+        mockKimiService.generateContent.mockResolvedValueOnce({ choices: [] });
+        await adapter.generateContent('moonshot-v1-8k', {});
+        expect(mockKimiService.generateContent).toHaveBeenCalled();
+    });
+
+    test('generateContent initializes when not initialized', async () => {
+        mockKimiService.isInitialized = false;
+        mockKimiService.generateContent.mockResolvedValueOnce({});
+        await adapter.generateContent('model', {});
+        expect(mockKimiService.initialize).toHaveBeenCalled();
+    });
+
+    test('generateContentStream delegates to kimiApiService', async () => {
+        const chunks = [];
+        for await (const c of adapter.generateContentStream('moonshot-v1-8k', {})) {
+            chunks.push(c);
+        }
+        expect(mockKimiService.generateContentStream).toHaveBeenCalled();
+    });
+
+    test('generateContentStream initializes when not initialized', async () => {
+        mockKimiService.isInitialized = false;
+        for await (const _ of adapter.generateContentStream('model', {})) { /* drain */ }
+        expect(mockKimiService.initialize).toHaveBeenCalled();
+    });
+
+    test('listModels delegates to kimiApiService', async () => {
+        await adapter.listModels();
+        expect(mockKimiService.listModels).toHaveBeenCalled();
+    });
+
+    test('refreshToken calls kimiApiService.refreshToken when expiry near', async () => {
+        mockKimiService.isExpiryDateNear.mockReturnValue(true);
+        await adapter.refreshToken();
+        expect(mockKimiService.refreshToken).toHaveBeenCalled();
+    });
+
+    test('refreshToken skips refresh when expiry not near', async () => {
+        mockKimiService.isExpiryDateNear.mockReturnValue(false);
+        await adapter.refreshToken();
+        expect(mockKimiService.refreshToken).not.toHaveBeenCalled();
+    });
+
+    test('forceRefreshToken delegates to kimiApiService', async () => {
+        await adapter.forceRefreshToken();
+        expect(mockKimiService.forceRefreshToken).toHaveBeenCalled();
+    });
+
+    test('isExpiryDateNear delegates to kimiApiService', () => {
+        mockKimiService.isExpiryDateNear.mockReturnValue(true);
+        expect(adapter.isExpiryDateNear()).toBe(true);
+    });
+
+    test('getUsageLimits returns empty object', async () => {
+        expect(await adapter.getUsageLimits()).toEqual({});
+    });
+});
+
+describe('CopilotApiServiceAdapter', () => {
+    let adapter;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockCopilotService.isInitialized = true;
+        adapter = new CopilotApiServiceAdapter({ uuid: 'cp1' });
+    });
+
+    test('generateContent delegates to copilotApiService', async () => {
+        mockCopilotService.generateContent.mockResolvedValueOnce({ choices: [] });
+        await adapter.generateContent('gpt-4o', {});
+        expect(mockCopilotService.generateContent).toHaveBeenCalled();
+    });
+
+    test('generateContent initializes when not initialized', async () => {
+        mockCopilotService.isInitialized = false;
+        mockCopilotService.generateContent.mockResolvedValueOnce({});
+        await adapter.generateContent('model', {});
+        expect(mockCopilotService.initialize).toHaveBeenCalled();
+    });
+
+    test('generateContentStream delegates to copilotApiService', async () => {
+        for await (const _ of adapter.generateContentStream('gpt-4o', {})) { /* drain */ }
+        expect(mockCopilotService.generateContentStream).toHaveBeenCalled();
+    });
+
+    test('listModels delegates to copilotApiService', async () => {
+        await adapter.listModels();
+        expect(mockCopilotService.listModels).toHaveBeenCalled();
+    });
+
+    test('refreshToken calls copilotApiService.refreshToken when expiry near', async () => {
+        mockCopilotService.isExpiryDateNear.mockReturnValue(true);
+        await adapter.refreshToken();
+        expect(mockCopilotService.refreshToken).toHaveBeenCalled();
+    });
+
+    test('refreshToken skips when expiry not near', async () => {
+        mockCopilotService.isExpiryDateNear.mockReturnValue(false);
+        await adapter.refreshToken();
+        expect(mockCopilotService.refreshToken).not.toHaveBeenCalled();
+    });
+
+    test('forceRefreshToken delegates to copilotApiService', async () => {
+        await adapter.forceRefreshToken();
+        expect(mockCopilotService.forceRefreshToken).toHaveBeenCalled();
+    });
+
+    test('isExpiryDateNear delegates to copilotApiService', () => {
+        mockCopilotService.isExpiryDateNear.mockReturnValue(true);
+        expect(adapter.isExpiryDateNear()).toBe(true);
+    });
+
+    test('getUsageLimits returns empty object', async () => {
+        expect(await adapter.getUsageLimits()).toEqual({});
+    });
+});
+
+describe('CodeBuddyApiServiceAdapter', () => {
+    let adapter;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockCodeBuddyService.isInitialized = true;
+        adapter = new CodeBuddyApiServiceAdapter({ uuid: 'cb1' });
+    });
+
+    test('generateContent delegates to codeBuddyApiService', async () => {
+        mockCodeBuddyService.generateContent.mockResolvedValueOnce({ choices: [] });
+        await adapter.generateContent('GLM-5.0', {});
+        expect(mockCodeBuddyService.generateContent).toHaveBeenCalled();
+    });
+
+    test('generateContent initializes when not initialized', async () => {
+        mockCodeBuddyService.isInitialized = false;
+        mockCodeBuddyService.generateContent.mockResolvedValueOnce({});
+        await adapter.generateContent('model', {});
+        expect(mockCodeBuddyService.initialize).toHaveBeenCalled();
+    });
+
+    test('generateContentStream delegates to codeBuddyApiService', async () => {
+        for await (const _ of adapter.generateContentStream('GLM-5.0', {})) { /* drain */ }
+        expect(mockCodeBuddyService.generateContentStream).toHaveBeenCalled();
+    });
+
+    test('listModels delegates to codeBuddyApiService', async () => {
+        await adapter.listModels();
+        expect(mockCodeBuddyService.listModels).toHaveBeenCalled();
+    });
+
+    test('refreshToken calls codeBuddyApiService.refreshToken when expiry near', async () => {
+        mockCodeBuddyService.isExpiryDateNear.mockReturnValue(true);
+        await adapter.refreshToken();
+        expect(mockCodeBuddyService.refreshToken).toHaveBeenCalled();
+    });
+
+    test('refreshToken skips when expiry not near', async () => {
+        mockCodeBuddyService.isExpiryDateNear.mockReturnValue(false);
+        await adapter.refreshToken();
+        expect(mockCodeBuddyService.refreshToken).not.toHaveBeenCalled();
+    });
+
+    test('forceRefreshToken delegates to codeBuddyApiService', async () => {
+        await adapter.forceRefreshToken();
+        expect(mockCodeBuddyService.forceRefreshToken).toHaveBeenCalled();
+    });
+
+    test('isExpiryDateNear delegates to codeBuddyApiService', () => {
+        mockCodeBuddyService.isExpiryDateNear.mockReturnValue(false);
+        expect(adapter.isExpiryDateNear()).toBe(false);
+    });
+
+    test('getUsageLimits returns empty object', async () => {
+        expect(await adapter.getUsageLimits()).toEqual({});
+    });
+});
+
+describe('KiloApiServiceAdapter', () => {
+    let adapter;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockKiloService.isInitialized = true;
+        adapter = new KiloApiServiceAdapter({ uuid: 'kl1' });
+    });
+
+    test('generateContent delegates to kiloApiService', async () => {
+        mockKiloService.generateContent.mockResolvedValueOnce({ choices: [] });
+        await adapter.generateContent('kilo/auto', {});
+        expect(mockKiloService.generateContent).toHaveBeenCalled();
+    });
+
+    test('generateContent initializes when not initialized', async () => {
+        mockKiloService.isInitialized = false;
+        mockKiloService.generateContent.mockResolvedValueOnce({});
+        await adapter.generateContent('model', {});
+        expect(mockKiloService.initialize).toHaveBeenCalled();
+    });
+
+    test('generateContentStream delegates to kiloApiService', async () => {
+        for await (const _ of adapter.generateContentStream('kilo/auto', {})) { /* drain */ }
+        expect(mockKiloService.generateContentStream).toHaveBeenCalled();
+    });
+
+    test('listModels delegates to kiloApiService', async () => {
+        await adapter.listModels();
+        expect(mockKiloService.listModels).toHaveBeenCalled();
+    });
+
+    test('refreshToken delegates to kiloApiService.refreshToken', async () => {
+        await adapter.refreshToken();
+        expect(mockKiloService.refreshToken).toHaveBeenCalled();
+    });
+
+    test('forceRefreshToken delegates to kiloApiService', async () => {
+        await adapter.forceRefreshToken();
+        expect(mockKiloService.forceRefreshToken).toHaveBeenCalled();
+    });
+
+    test('isExpiryDateNear delegates to kiloApiService', () => {
+        mockKiloService.isExpiryDateNear.mockReturnValue(false);
+        expect(adapter.isExpiryDateNear()).toBe(false);
+    });
+
+    test('getUsageLimits returns empty object', async () => {
+        expect(await adapter.getUsageLimits()).toEqual({});
+    });
+});
+
+describe('GitLabApiServiceAdapter', () => {
+    let adapter;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        mockGitLabService.isInitialized = true;
+        adapter = new GitLabApiServiceAdapter({ uuid: 'gl1' });
+    });
+
+    test('generateContent delegates to gitlabApiService', async () => {
+        mockGitLabService.generateContent.mockResolvedValueOnce({ choices: [] });
+        await adapter.generateContent('gitlab-duo', {});
+        expect(mockGitLabService.generateContent).toHaveBeenCalled();
+    });
+
+    test('generateContent initializes when not initialized', async () => {
+        mockGitLabService.isInitialized = false;
+        mockGitLabService.generateContent.mockResolvedValueOnce({});
+        await adapter.generateContent('model', {});
+        expect(mockGitLabService.initialize).toHaveBeenCalled();
+    });
+
+    test('generateContentStream delegates to gitlabApiService', async () => {
+        for await (const _ of adapter.generateContentStream('gitlab-duo', {})) { /* drain */ }
+        expect(mockGitLabService.generateContentStream).toHaveBeenCalled();
+    });
+
+    test('listModels delegates to gitlabApiService', async () => {
+        await adapter.listModels();
+        expect(mockGitLabService.listModels).toHaveBeenCalled();
+    });
+
+    test('refreshToken calls gitlabApiService.refreshToken when expiry near', async () => {
+        mockGitLabService.isExpiryDateNear.mockReturnValue(true);
+        await adapter.refreshToken();
+        expect(mockGitLabService.refreshToken).toHaveBeenCalled();
+    });
+
+    test('refreshToken skips when expiry not near', async () => {
+        mockGitLabService.isExpiryDateNear.mockReturnValue(false);
+        await adapter.refreshToken();
+        expect(mockGitLabService.refreshToken).not.toHaveBeenCalled();
+    });
+
+    test('forceRefreshToken delegates to gitlabApiService', async () => {
+        await adapter.forceRefreshToken();
+        expect(mockGitLabService.forceRefreshToken).toHaveBeenCalled();
+    });
+
+    test('isExpiryDateNear delegates to gitlabApiService', () => {
+        mockGitLabService.isExpiryDateNear.mockReturnValue(true);
+        expect(adapter.isExpiryDateNear()).toBe(true);
+    });
+
+    test('getUsageLimits returns empty object', async () => {
+        expect(await adapter.getUsageLimits()).toEqual({});
     });
 });
