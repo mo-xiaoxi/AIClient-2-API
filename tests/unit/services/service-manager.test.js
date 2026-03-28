@@ -14,6 +14,14 @@ import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globa
 // Controllable mock functions
 // ---------------------------------------------------------------------------
 const mockGetServiceAdapter = jest.fn();
+
+// Mutable PROVIDER_MAPPINGS array so individual tests can push entries
+const mockProviderMappingsArr = [];
+
+// fs mock references (set up before beforeAll so tests can control them)
+const mockFsExistsSync = jest.fn().mockReturnValue(false);
+const mockPfsWriteFile = jest.fn().mockResolvedValue(undefined);
+const mockPfsReaddir = jest.fn().mockResolvedValue([]);
 const mockServiceInstances = {};
 
 const mockProviderPoolManagerInstance = {
@@ -71,16 +79,16 @@ beforeAll(async () => {
     }));
 
     await jest.unstable_mockModule('fs', () => ({
-        existsSync: jest.fn().mockReturnValue(false),
+        existsSync: mockFsExistsSync,
         readFileSync: jest.fn().mockReturnValue('{}'),
         promises: {
-            readdir: jest.fn().mockResolvedValue([]),
-            writeFile: jest.fn().mockResolvedValue(undefined),
+            readdir: mockPfsReaddir,
+            writeFile: mockPfsWriteFile,
         },
     }));
 
     await jest.unstable_mockModule('../../../src/utils/provider-utils.js', () => ({
-        PROVIDER_MAPPINGS: [],
+        PROVIDER_MAPPINGS: mockProviderMappingsArr,
         createProviderConfig: jest.fn((opts) => ({ [opts.credPathKey]: opts.credPath })),
         addToUsedPaths: jest.fn(),
         isPathUsed: jest.fn().mockReturnValue(false),
@@ -458,5 +466,124 @@ describe('autoLinkProviderConfigs()', () => {
         const config = { providerPools: { 'openai-custom': [] } };
         const result = await autoLinkProviderConfigs(config);
         expect(result).toEqual({ 'openai-custom': [] });
+    });
+
+    test('onlyCurrentCred path: linkSingleCredential file not found returns null', async () => {
+        mockFsExistsSync.mockReturnValueOnce(false);
+        const config = { providerPools: {} };
+        const result = await autoLinkProviderConfigs(config, {
+            onlyCurrentCred: true,
+            credPath: 'configs/gemini/missing.json',
+        });
+        // file not found → linkSingleCredential returns null → no new providers
+        expect(result).toEqual({});
+    });
+
+    test('onlyCurrentCred path: linkSingleCredential non-JSON file returns null', async () => {
+        mockFsExistsSync.mockReturnValueOnce(true); // file exists
+        const config = { providerPools: {} };
+        const result = await autoLinkProviderConfigs(config, {
+            onlyCurrentCred: true,
+            credPath: 'configs/gemini/token.txt', // .txt, not .json
+        });
+        expect(result).toEqual({});
+    });
+
+    test('onlyCurrentCred path: linkSingleCredential no matching provider mapping', async () => {
+        // File exists and is JSON, but PROVIDER_MAPPINGS is empty → no match
+        mockFsExistsSync.mockReturnValueOnce(true);
+        const config = { providerPools: {} };
+        const result = await autoLinkProviderConfigs(config, {
+            onlyCurrentCred: true,
+            credPath: 'configs/gemini/creds.json',
+        });
+        expect(result).toEqual({});
+    });
+
+    test('onlyCurrentCred path: linkSingleCredential succeeds and writes provider_pools.json', async () => {
+        const cwd = process.cwd();
+        const mapping = {
+            dirName: 'gemini',
+            providerType: 'gemini-cli-oauth',
+            credPathKey: 'GEMINI_CREDS_FILE_PATH',
+            defaultCheckModel: 'gemini-pro',
+            displayName: 'Gemini CLI',
+            needsProjectId: false,
+        };
+        mockProviderMappingsArr.push(mapping);
+
+        try {
+            // file exists and is within the mapping's configsPath
+            mockFsExistsSync.mockReturnValueOnce(true);
+            mockPfsWriteFile.mockResolvedValueOnce(undefined);
+
+            const credPath = `configs/gemini/creds.json`;
+            const config = { providerPools: {}, PROVIDER_POOLS_FILE_PATH: 'configs/provider_pools.json' };
+            const result = await autoLinkProviderConfigs(config, {
+                onlyCurrentCred: true,
+                credPath,
+            });
+            // Should have linked the credential
+            expect(config.providerPools['gemini-cli-oauth']).toBeDefined();
+            expect(mockPfsWriteFile).toHaveBeenCalled();
+        } finally {
+            mockProviderMappingsArr.length = 0; // clean up
+        }
+    });
+
+    test('PROVIDER_MAPPINGS loop: discovers and links new credential files', async () => {
+        const cwd = process.cwd();
+        const mapping = {
+            dirName: 'gemini',
+            providerType: 'gemini-cli-oauth',
+            credPathKey: 'GEMINI_CREDS_FILE_PATH',
+            defaultCheckModel: 'gemini-pro',
+            displayName: 'Gemini CLI',
+            needsProjectId: false,
+        };
+        mockProviderMappingsArr.push(mapping);
+
+        try {
+            // Directory exists
+            mockFsExistsSync.mockReturnValueOnce(true);
+            // scanProviderDirectory: readdir returns one JSON file
+            mockPfsReaddir.mockResolvedValueOnce([
+                { name: 'creds.json', isFile: () => true, isDirectory: () => false },
+            ]);
+            mockPfsWriteFile.mockResolvedValueOnce(undefined);
+
+            const config = {
+                providerPools: { 'gemini-cli-oauth': [] },
+                PROVIDER_POOLS_FILE_PATH: 'configs/provider_pools.json',
+            };
+            const result = await autoLinkProviderConfigs(config);
+            expect(config.providerPools['gemini-cli-oauth'].length).toBeGreaterThan(0);
+            expect(mockPfsWriteFile).toHaveBeenCalled();
+        } finally {
+            mockProviderMappingsArr.length = 0;
+        }
+    });
+
+    test('PROVIDER_MAPPINGS loop: skips dirs that do not exist', async () => {
+        const mapping = {
+            dirName: 'cursor',
+            providerType: 'cursor-oauth',
+            credPathKey: 'CURSOR_TOKEN_FILE_PATH',
+            defaultCheckModel: 'cursor-small',
+            displayName: 'Cursor',
+            needsProjectId: false,
+        };
+        mockProviderMappingsArr.push(mapping);
+
+        try {
+            // directory does not exist
+            mockFsExistsSync.mockReturnValueOnce(false);
+            const config = { providerPools: {} };
+            await autoLinkProviderConfigs(config);
+            // no files processed
+            expect(mockPfsWriteFile).not.toHaveBeenCalled();
+        } finally {
+            mockProviderMappingsArr.length = 0;
+        }
     });
 });

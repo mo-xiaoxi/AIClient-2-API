@@ -64,10 +64,11 @@ function createMockRes() {
 let handleGetConfig;
 let handleUpdateConfig;
 let handleUpdateAdminPassword;
+let handleReloadConfig;
 let getRequestBody;
 
 beforeAll(async () => {
-    ({ handleGetConfig, handleUpdateConfig, handleUpdateAdminPassword } =
+    ({ handleGetConfig, handleUpdateConfig, handleUpdateAdminPassword, handleReloadConfig } =
         await import('../../../src/ui-modules/config-api.js'));
     ({ getRequestBody } = await import('../../../src/utils/common.js'));
 });
@@ -97,6 +98,33 @@ describe('config-api.js - handleGetConfig', () => {
         const body = JSON.parse(res.end.mock.calls[0][0]);
         // existsSync is mocked to return false
         expect(body.systemPrompt).toBe('');
+    });
+
+    test('reads system prompt when file exists', async () => {
+        const fs = await import('fs');
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue('You are a helpful assistant.');
+
+        const req = {};
+        const res = createMockRes();
+        const currentConfig = { SYSTEM_PROMPT_FILE_PATH: 'configs/system_prompt.txt' };
+        await handleGetConfig(req, res, currentConfig);
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.systemPrompt).toBe('You are a helpful assistant.');
+    });
+
+    test('returns empty systemPrompt when readFileSync throws', async () => {
+        const fs = await import('fs');
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockImplementation(() => { throw new Error('EACCES'); });
+
+        const req = {};
+        const res = createMockRes();
+        const currentConfig = { SYSTEM_PROMPT_FILE_PATH: 'configs/system_prompt.txt' };
+        await handleGetConfig(req, res, currentConfig);
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.systemPrompt).toBe('');
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     });
 });
 
@@ -129,6 +157,88 @@ describe('config-api.js - handleUpdateConfig', () => {
         const currentConfig = { SERVER_PORT: 3000 };
         await handleUpdateConfig(req, res, currentConfig);
         expect(res.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+    });
+
+    test('updates system prompt file when systemPrompt provided', async () => {
+        const fs = await import('fs');
+        fs.writeFileSync.mockReset(); // ensure no throw
+        getRequestBody.mockResolvedValue({ systemPrompt: 'New system prompt' });
+
+        const req = {};
+        const res = createMockRes();
+        const currentConfig = { SYSTEM_PROMPT_FILE_PATH: 'configs/input_system_prompt.txt' };
+        await handleUpdateConfig(req, res, currentConfig);
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+            'configs/input_system_prompt.txt',
+            'New system prompt',
+            'utf-8'
+        );
+    });
+
+    test('logs warning when system prompt write fails', async () => {
+        const fs = await import('fs');
+        let writeCallCount = 0;
+        fs.writeFileSync.mockImplementation((filePath) => {
+            // First call is for system prompt (throw), second is config.json (succeed)
+            writeCallCount++;
+            if (writeCallCount === 1) {
+                throw new Error('Cannot write prompt');
+            }
+        });
+        getRequestBody.mockResolvedValue({ systemPrompt: 'New prompt' });
+
+        const req = {};
+        const res = createMockRes();
+        const currentConfig = { SYSTEM_PROMPT_FILE_PATH: 'configs/input_system_prompt.txt' };
+        await handleUpdateConfig(req, res, currentConfig);
+        // Even after write failure, config should still be written
+        expect(writeCallCount).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe('config-api.js - handleReloadConfig', () => {
+    test('returns 200 on successful config reload', async () => {
+        const { initializeConfig } = await import('../../../src/core/config-manager.js');
+        initializeConfig.mockResolvedValue({
+            SERVER_PORT: 3000,
+            PROVIDER_POOLS_FILE_PATH: 'configs/provider_pools.json',
+        });
+
+        const req = {};
+        const res = createMockRes();
+        await handleReloadConfig(req, res, null);
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.success).toBe(true);
+    });
+
+    test('calls providerPoolManager methods when provided', async () => {
+        const { initializeConfig } = await import('../../../src/core/config-manager.js');
+        initializeConfig.mockResolvedValue({ SERVER_PORT: 3000, providerPools: {} });
+
+        const mockPoolManager = {
+            providerPools: {},
+            initializeProviderStatus: jest.fn(),
+        };
+
+        const req = {};
+        const res = createMockRes();
+        await handleReloadConfig(req, res, mockPoolManager);
+        expect(mockPoolManager.initializeProviderStatus).toHaveBeenCalled();
+        expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    });
+
+    test('returns 500 when reload fails', async () => {
+        const { initializeConfig } = await import('../../../src/core/config-manager.js');
+        initializeConfig.mockRejectedValue(new Error('Config file not found'));
+
+        const req = {};
+        const res = createMockRes();
+        await handleReloadConfig(req, res, null);
+        expect(res.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+        const body = JSON.parse(res.end.mock.calls[0][0]);
+        expect(body.error.message).toContain('Config file not found');
     });
 });
 

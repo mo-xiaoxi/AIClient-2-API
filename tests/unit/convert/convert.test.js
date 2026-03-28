@@ -424,3 +424,224 @@ describe('converters/utils — extractTextFromMessageContent', () => {
         expect(result).toBe('');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Uncovered wrapper functions — stream chunks, model lists, cross-protocol
+// ---------------------------------------------------------------------------
+
+const simpleGeminiChunk = {
+    candidates: [{ content: { parts: [{ text: 'hi' }], role: 'model' }, finishReason: null }],
+};
+const simpleClaudeChunk = {
+    type: 'content_block_delta',
+    index: 0,
+    delta: { type: 'text_delta', text: 'hi' },
+};
+const simpleGeminiResponse = {
+    candidates: [{ content: { parts: [{ text: 'Hello!' }], role: 'model' }, finishReason: 'STOP' }],
+    usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 2 },
+};
+const simpleClaudeResponse = {
+    id: 'msg_01', type: 'message', role: 'assistant',
+    content: [{ type: 'text', text: 'Hello!' }],
+    model: 'claude-3-5-sonnet', stop_reason: 'end_turn',
+    usage: { input_tokens: 10, output_tokens: 5 },
+};
+const simpleOpenAIResponse = {
+    id: 'chatcmpl-01', object: 'chat.completion', model: 'gpt-4',
+    choices: [{ index: 0, message: { role: 'assistant', content: 'Hi' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+};
+const simpleOpenAIChunk = {
+    id: 'chatcmpl-01', object: 'chat.completion.chunk', model: 'gpt-4',
+    choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null }],
+};
+
+describe('toOpenAIStreamChunkFromGemini', () => {
+    test('converts gemini chunk to OpenAI stream chunk', () => {
+        const result = convert.toOpenAIStreamChunkFromGemini(simpleGeminiChunk, 'gemini-2.0-flash');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIStreamChunkFromClaude', () => {
+    test('converts claude chunk to OpenAI stream chunk', () => {
+        const result = convert.toOpenAIStreamChunkFromClaude(simpleClaudeChunk, 'claude-3-5-sonnet');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIModelListFromGemini', () => {
+    test('converts gemini model list to OpenAI format', () => {
+        const geminiModels = { models: [{ name: 'models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash' }] };
+        const result = convert.toOpenAIModelListFromGemini(geminiModels);
+        expect(result).toHaveProperty('data');
+    });
+});
+
+describe('toOpenAIModelListFromClaude', () => {
+    test('converts claude model list to OpenAI format', () => {
+        const claudeModels = { models: [{ id: 'claude-3-5-sonnet' }] };
+        const result = convert.toOpenAIModelListFromClaude(claudeModels);
+        expect(result).toHaveProperty('data');
+    });
+});
+
+describe('toClaudeRequestFromOpenAIResponses', () => {
+    test('converts OpenAI Responses request to Claude format', () => {
+        const responsesRequest = {
+            model: 'gpt-4', input: 'Hello',
+        };
+        const result = convert.toClaudeRequestFromOpenAIResponses(responsesRequest);
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toClaudeChatCompletionFromOpenAI', () => {
+    test('converts OpenAI response to Claude response format', () => {
+        const result = convert.toClaudeChatCompletionFromOpenAI(simpleOpenAIResponse, 'gpt-4');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toClaudeChatCompletionFromGemini', () => {
+    test('converts Gemini response to Claude response format', () => {
+        const result = convert.toClaudeChatCompletionFromGemini(simpleGeminiResponse, 'gemini-2.0-flash');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toClaudeStreamChunkFromOpenAI', () => {
+    test('converts OpenAI stream chunk to Claude format', () => {
+        const result = convert.toClaudeStreamChunkFromOpenAI(simpleOpenAIChunk, 'gpt-4');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toClaudeStreamChunkFromGemini', () => {
+    test('converts Gemini stream chunk to Claude format', () => {
+        const result = convert.toClaudeStreamChunkFromGemini(simpleGeminiChunk, 'gemini-2.0-flash');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toClaudeModelListFromOpenAI', () => {
+    test('converts OpenAI model list to Claude format', () => {
+        const openaiModels = { data: [{ id: 'gpt-4' }] };
+        const result = convert.toClaudeModelListFromOpenAI(openaiModels);
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toClaudeModelListFromGemini', () => {
+    test('converts Gemini model list to Claude format', () => {
+        const geminiModels = { models: [{ name: 'models/gemini-2.0-flash' }] };
+        const result = convert.toClaudeModelListFromGemini(geminiModels);
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toGeminiRequestFromClaude', () => {
+    test('converts Claude request to Gemini format', () => {
+        const claudeRequest = {
+            model: 'claude-3-5-sonnet',
+            max_tokens: 100,
+            messages: [{ role: 'user', content: 'Hello' }],
+        };
+        const result = convert.toGeminiRequestFromClaude(claudeRequest);
+        expect(result).toHaveProperty('contents');
+    });
+});
+
+describe('toGeminiRequestFromOpenAIResponses', () => {
+    test('converts OpenAI Responses request to Gemini format', () => {
+        const responsesRequest = { model: 'gpt-4', input: 'Hello' };
+        const result = convert.toGeminiRequestFromOpenAIResponses(responsesRequest);
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIResponsesFromOpenAI', () => {
+    test('converts OpenAI response to OpenAI Responses format', () => {
+        const result = convert.toOpenAIResponsesFromOpenAI(simpleOpenAIResponse, 'gpt-4');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIResponsesFromClaude', () => {
+    test('converts Claude response to OpenAI Responses format', () => {
+        const result = convert.toOpenAIResponsesFromClaude(simpleClaudeResponse, 'claude-3-5-sonnet');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIResponsesFromGemini', () => {
+    test('converts Gemini response to OpenAI Responses format', () => {
+        const result = convert.toOpenAIResponsesFromGemini(simpleGeminiResponse, 'gemini-2.0-flash');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIResponsesStreamChunkFromOpenAI', () => {
+    test('converts OpenAI chunk to OpenAI Responses stream chunk', () => {
+        const result = convert.toOpenAIResponsesStreamChunkFromOpenAI(simpleOpenAIChunk, 'gpt-4', 'req-id');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIResponsesStreamChunkFromClaude', () => {
+    test('converts Claude chunk to OpenAI Responses stream chunk', () => {
+        const result = convert.toOpenAIResponsesStreamChunkFromClaude(simpleClaudeChunk, 'claude-3-5-sonnet', 'req-id');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIResponsesStreamChunkFromGemini', () => {
+    test('converts Gemini chunk to OpenAI Responses stream chunk', () => {
+        const result = convert.toOpenAIResponsesStreamChunkFromGemini(simpleGeminiChunk, 'gemini-2.0-flash', 'req-id');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIRequestFromOpenAIResponses', () => {
+    test('converts OpenAI Responses request to OpenAI format', () => {
+        const responsesRequest = { model: 'gpt-4', input: 'Hello' };
+        const result = convert.toOpenAIRequestFromOpenAIResponses(responsesRequest);
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIChatCompletionFromOpenAIResponses', () => {
+    test('converts OpenAI Responses response to OpenAI chat completion format', () => {
+        const responsesResponse = {
+            id: 'resp-01', object: 'response', model: 'gpt-4',
+            output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hi' }] }],
+            usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+        };
+        const result = convert.toOpenAIChatCompletionFromOpenAIResponses(responsesResponse, 'gpt-4');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('toOpenAIStreamChunkFromOpenAIResponses', () => {
+    test('converts OpenAI Responses chunk to OpenAI stream chunk', () => {
+        const responsesChunk = {
+            type: 'response.output_text.delta', delta: 'hi', item_id: 'item-01',
+        };
+        const result = convert.toOpenAIStreamChunkFromOpenAIResponses(responsesChunk, 'gpt-4');
+        expect(result).toBeDefined();
+    });
+});
+
+describe('convertData — throws when protocol unrecognized', () => {
+    test('throws when fromProtocol is unrecognized', () => {
+        expect(() =>
+            convert.convertData(
+                { messages: [{ role: 'user', content: 'hi' }] },
+                'request',
+                'unknown-protocol-xyz',
+                'openai-custom'
+            )
+        ).toThrow();
+    });
+});

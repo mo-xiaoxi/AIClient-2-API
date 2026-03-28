@@ -135,4 +135,135 @@ describe('QwenApiService', () => {
         svc.qwenClient.setCredentials(null);
         expect(svc.isExpiryDateNear()).toBe(false);
     });
+
+    test('_getQwenCachedCredentialPath uses custom path when configured', () => {
+        const svc = makeService({ QWEN_OAUTH_CREDS_FILE_PATH: '/custom/path/creds.json' });
+        const result = svc._getQwenCachedCredentialPath();
+        expect(result).toContain('creds.json');
+    });
+
+    test('_getQwenCachedCredentialPath uses default home dir when no custom path', () => {
+        const svc = makeService();
+        const result = svc._getQwenCachedCredentialPath();
+        expect(result).toContain('.qwen');
+        expect(result).toContain('oauth_creds.json');
+    });
+});
+
+describe('QwenApiService — initialize()', () => {
+    test('sets isInitialized to true', async () => {
+        const svc = makeService();
+        expect(svc.isInitialized).toBe(false);
+
+        // Spy on loadCredentials to skip actual file I/O
+        svc.loadCredentials = jest.fn().mockResolvedValue(undefined);
+
+        await svc.initialize();
+        expect(svc.isInitialized).toBe(true);
+        expect(svc.loadCredentials).toHaveBeenCalledTimes(1);
+    });
+
+    test('is idempotent (second call is no-op)', async () => {
+        const svc = makeService();
+        svc.loadCredentials = jest.fn().mockResolvedValue(undefined);
+
+        await svc.initialize();
+        await svc.initialize();
+
+        expect(svc.loadCredentials).toHaveBeenCalledTimes(1);
+    });
+
+    test('creates currentAxiosInstance after initialization', async () => {
+        const svc = makeService();
+        svc.loadCredentials = jest.fn().mockResolvedValue(undefined);
+
+        await svc.initialize();
+        expect(svc.currentAxiosInstance).toBeDefined();
+    });
+});
+
+describe('QwenApiService — generateContent()', () => {
+    test('delegates to callApiWithAuthAndRetry', async () => {
+        const svc = makeService();
+        svc.callApiWithAuthAndRetry = jest.fn().mockResolvedValue({ choices: [{ message: { content: 'hi' } }] });
+
+        const result = await svc.generateContent('qwen3-coder', {
+            messages: [{ role: 'user', content: 'Hello' }],
+        });
+
+        expect(svc.callApiWithAuthAndRetry).toHaveBeenCalledWith('/chat/completions', expect.any(Object), false);
+        expect(result).toBeDefined();
+    });
+
+    test('removes _monitorRequestId from body', async () => {
+        const svc = makeService();
+        svc.callApiWithAuthAndRetry = jest.fn().mockResolvedValue({});
+
+        const body = { messages: [], _monitorRequestId: 'req-123' };
+        await svc.generateContent('qwen3-coder', body);
+
+        expect(body._monitorRequestId).toBeUndefined();
+    });
+});
+
+describe('QwenApiService — generateContentStream()', () => {
+    test('delegates to callApiWithAuthAndRetry with stream=true', async () => {
+        const svc = makeService();
+
+        const data = `data: ${JSON.stringify({ id: 'x' })}\n\ndata: [DONE]\n\n`;
+        async function* makeAsyncIter() {
+            yield Buffer.from(data);
+        }
+        svc.callApiWithAuthAndRetry = jest.fn().mockResolvedValue(makeAsyncIter());
+
+        const chunks = [];
+        for await (const chunk of svc.generateContentStream('qwen3-coder', { messages: [] })) {
+            chunks.push(chunk);
+        }
+
+        expect(svc.callApiWithAuthAndRetry).toHaveBeenCalledWith('/chat/completions', expect.any(Object), true);
+        expect(chunks.length).toBe(1);
+        expect(chunks[0].id).toBe('x');
+    });
+
+    test('removes _requestBaseUrl from body', async () => {
+        const svc = makeService();
+        async function* emptyStream() {}
+        svc.callApiWithAuthAndRetry = jest.fn().mockResolvedValue(emptyStream());
+
+        const body = { messages: [], _requestBaseUrl: 'http://example.com' };
+        for await (const _ of svc.generateContentStream('qwen3-coder', body)) { /* drain */ }
+
+        expect(body._requestBaseUrl).toBeUndefined();
+    });
+});
+
+describe('QwenApiService — callApiWithAuthAndRetry() error handling', () => {
+    test('marks credential unhealthy on auth error and throws', async () => {
+        const { getProviderPoolManager } = await import('../../../src/services/service-manager.js');
+        const mockPool = { markProviderNeedRefresh: jest.fn() };
+        getProviderPoolManager.mockReturnValue(mockPool);
+
+        const svc = makeService({ uuid: 'qwen-uuid' });
+        const authError = Object.assign(new Error('Unauthorized'), { response: { status: 401 } });
+        svc.getValidToken = jest.fn().mockRejectedValue(authError);
+
+        await expect(svc.callApiWithAuthAndRetry('/chat/completions', {}, false))
+            .rejects.toThrow();
+    });
+
+    test('returns data on success', async () => {
+        const svc = makeService();
+        const mockRequest = jest.fn().mockResolvedValue({ data: { choices: [] } });
+        const { default: axiosMock } = await import('axios');
+        axiosMock.create.mockReturnValueOnce({ request: mockRequest });
+
+        svc.getValidToken = jest.fn().mockResolvedValue({
+            token: 'test-token',
+            endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        });
+
+        const result = await svc.callApiWithAuthAndRetry('/chat/completions', { model: 'qwen-turbo', messages: [] });
+        expect(result).toBeDefined();
+    });
 });

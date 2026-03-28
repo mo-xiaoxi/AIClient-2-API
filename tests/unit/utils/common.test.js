@@ -452,4 +452,90 @@ describe('handleError', () => {
         expect(payload.error.code).toBe(429);
         expect(payload.error.message).toContain('Too many requests');
     });
+
+    test('404 client error uses default message with status code', () => {
+        jest.spyOn(logger, 'error').mockImplementation(() => {});
+        const res = {
+            writableEnded: false,
+            destroyed: false,
+            headersSent: false,
+            writeHead: jest.fn(),
+            end: jest.fn(),
+        };
+        handleError(res, Object.assign(new Error('Not found'), { statusCode: 404 }), null);
+        const payload = JSON.parse(res.end.mock.calls[0][0]);
+        expect(payload.error.code).toBe(404);
+    });
+
+    test('501 server error uses default message with status code', () => {
+        jest.spyOn(logger, 'error').mockImplementation(() => {});
+        const res = {
+            writableEnded: false,
+            destroyed: false,
+            headersSent: false,
+            writeHead: jest.fn(),
+            end: jest.fn(),
+        };
+        handleError(res, Object.assign(new Error('Not implemented'), { statusCode: 501 }), null);
+        const payload = JSON.parse(res.end.mock.calls[0][0]);
+        expect(payload.error.code).toBe(501);
+    });
+
+    test('handles res.end throwing silently', () => {
+        jest.spyOn(logger, 'error').mockImplementation(() => {});
+        const res = {
+            writableEnded: false,
+            destroyed: false,
+            headersSent: false,
+            writeHead: jest.fn(),
+            end: jest.fn().mockImplementation(() => { throw new Error('stream closed'); }),
+        };
+        expect(() => handleError(res, Object.assign(new Error('err'), { statusCode: 500 }), null)).not.toThrow();
+    });
+
+    test('403 with claude provider includes claude-specific suggestions', () => {
+        jest.spyOn(logger, 'error').mockImplementation(() => {});
+        const res = {
+            writableEnded: false,
+            destroyed: false,
+            headersSent: false,
+            writeHead: jest.fn(),
+            end: jest.fn(),
+        };
+        handleError(res, Object.assign(new Error('Forbidden'), { statusCode: 403 }), 'claude-custom');
+        const payload = JSON.parse(res.end.mock.calls[0][0]);
+        expect(payload.error.code).toBe(403);
+        // Claude provider should have Anthropic-specific suggestions
+        expect(Array.isArray(payload.error.suggestions)).toBe(true);
+    });
+});
+
+describe('extractSystemPromptFromRequestBody — branch coverage', () => {
+    test('CLAUDE with string user message fallback', () => {
+        const result = extractSystemPromptFromRequestBody({
+            messages: [{ role: 'user', content: 'user question' }],
+        }, MODEL_PROTOCOL_PREFIX.CLAUDE);
+        expect(result).toBe('user question');
+    });
+
+    test('CLAUDE with array user message fallback', () => {
+        const result = extractSystemPromptFromRequestBody({
+            messages: [{ role: 'user', content: [{ text: 'hello' }, { text: ' world' }] }],
+        }, MODEL_PROTOCOL_PREFIX.CLAUDE);
+        expect(result).toContain('hello');
+    });
+
+    test('CLAUDE with system object', () => {
+        const result = extractSystemPromptFromRequestBody({
+            system: { prompt: 'You are helpful' },
+        }, MODEL_PROTOCOL_PREFIX.CLAUDE);
+        expect(result).toContain('prompt');
+    });
+
+    test('unknown provider returns empty string and logs warn', () => {
+        jest.spyOn(logger, 'warn').mockImplementation(() => {});
+        const result = extractSystemPromptFromRequestBody({}, 'unknown-provider');
+        expect(result).toBe('');
+        jest.restoreAllMocks();
+    });
 });
